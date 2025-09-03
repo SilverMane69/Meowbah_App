@@ -14,6 +14,10 @@ import com.kawaii.meowbah.R // For drawable resources
 
 object NotificationUtils {
 
+    // Temp define constants to avoid MainActivity dependency during build issue
+    private const val ACTION_VIEW_VIDEO_TEMP = "com.kawaii.meowbah.ACTION_VIEW_VIDEO"
+    private const val EXTRA_VIDEO_ID_TEMP = "com.kawaii.meowbah.EXTRA_VIDEO_ID"
+
     private const val CHANNEL_ID = "meowbah_new_video_channel"
     private const val CHANNEL_NAME = "New Meowbah Videos"
     private const val CHANNEL_DESCRIPTION = "Notifications for new Meowbah video uploads"
@@ -32,23 +36,19 @@ object NotificationUtils {
     }
 
     fun showNewVideoNotification(context: Context, videoTitle: String, videoId: String) {
-        // Create an explicit intent for an Activity in your app
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            // Optionally, you can add data to the intent to navigate to the specific video
-            // e.g., putExtra("videoId", videoId)
+            action = ACTION_VIEW_VIDEO_TEMP 
+            putExtra(EXTRA_VIDEO_ID_TEMP, videoId) 
         }
         val pendingIntent: PendingIntent = PendingIntent.getActivity(
             context, 
-            videoId.hashCode(), // Use videoId hashcode for unique request code 
+            videoId.hashCode(), 
             intent, 
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Use the new monochrome icon
-        val smallIconResId = R.drawable.ic_notification_meowbah_monochrome 
-
-        // Use your app logo as the large icon
+        val smallIconResId = android.R.drawable.ic_menu_camera 
         val largeIconBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.meowlogo)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -58,18 +58,15 @@ object NotificationUtils {
             .setContentText(videoTitle)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
-            .setAutoCancel(true) // Dismiss notification when tapped
+            .setAutoCancel(true)
 
         with(NotificationManagerCompat.from(context)) {
             val notificationId = (NOTIFICATION_ID_PREFIX + videoId).hashCode()
             try {
                  notify(notificationId, builder.build())
             } catch (e: SecurityException) {
-                // This can happen if POST_NOTIFICATIONS permission is not granted on Android 13+
-                // Log or handle this appropriately. For now, just logging.
                 android.util.Log.e("NotificationUtils", "SecurityException: Missing POST_NOTIFICATIONS permission?", e)
             }
-           
         }
     }
 }

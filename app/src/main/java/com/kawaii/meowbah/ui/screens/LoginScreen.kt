@@ -3,7 +3,7 @@ package com.kawaii.meowbah.ui.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row // Added for Switch
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,7 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch // Added for Switch
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -50,8 +50,8 @@ fun LoginScreen(
     onForgotPasswordClicked: () -> Unit = {},
     onGuestLoginClicked: () -> Unit = {},
     onGoogleSignInClicked: () -> Unit = {},
-    isLoginMusicEnabled: Boolean = true, // New parameter
-    onLoginMusicEnabledChange: (Boolean) -> Unit = {} // New parameter
+    isLoginMusicEnabled: Boolean = true,
+    onLoginMusicEnabledChange: (Boolean) -> Unit = {}
 ) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -128,8 +128,8 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             AndroidView(
-                factory = { context ->
-                    SignInButton(context).apply {
+                factory = { contextView -> // Renamed context to contextView to avoid clash
+                    SignInButton(contextView).apply {
                         setSize(SignInButton.SIZE_WIDE)
                         setColorScheme(SignInButton.COLOR_AUTO)
                         setOnClickListener {

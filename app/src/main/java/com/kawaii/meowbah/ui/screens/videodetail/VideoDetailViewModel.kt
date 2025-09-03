@@ -1,86 +1,110 @@
-package com.kawaii.meowbah.ui.screens.videodetail // Or the correct package for your ViewModel
+package com.kawaii.meowbah.ui.screens.videodetail
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.kawaii.meowbah.ui.screens.videos.PlaceholderVideoDetailItem // Ensure this import is correct
-import kotlinx.coroutines.delay // For placeholder/simulation
+import com.kawaii.meowbah.BuildConfig
+import com.kawaii.meowbah.data.remote.YoutubeApiService
+import com.kawaii.meowbah.data.YoutubeVideoDetailResponse // For API response
+import com.kawaii.meowbah.ui.screens.videos.PlaceholderVideoDetailItem
+// VideoItem is no longer used as initialDetails
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+import retrofit2.HttpException
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import java.io.IOException
 
 class VideoDetailViewModel : ViewModel() {
 
-    // Private MutableStateFlow for video details
     private val _videoDetail = MutableStateFlow<PlaceholderVideoDetailItem?>(null)
-    // Public immutable StateFlow for observing video details
     val videoDetail: StateFlow<PlaceholderVideoDetailItem?> = _videoDetail.asStateFlow()
 
-    // Private MutableStateFlow for loading state
-    private val _isLoading = MutableStateFlow(true) // Start with loading true
-    // Public immutable StateFlow for observing loading state
+    private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    // Private MutableStateFlow for error messages
     private val _error = MutableStateFlow<String?>(null)
-    // Public immutable StateFlow for observing error messages
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    fun fetchVideoDetails(videoId: String) {
+    private val youtubeApiService: YoutubeApiService by lazy {
+        Retrofit.Builder()
+            .baseUrl("https://www.googleapis.com/youtube/v3/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(YoutubeApiService::class.java)
+    }
+    private val apiKey = BuildConfig.YOUTUBE_API_KEY
+
+    fun fetchVideoDetails(videoId: String) { // MODIFIED: Removed initialDetails parameter
         viewModelScope.launch {
             _isLoading.value = true
-            _error.value = null // Clear previous errors
-            _videoDetail.value = null // Clear previous details
+            _error.value = null
+            _videoDetail.value = null // Reset previous detail
 
+            val requestDescription = "youtubeApiService.getVideoDetails(id=$videoId)"
             try {
-                // --- THIS IS WHERE YOU'D PUT YOUR ACTUAL DATA FETCHING LOGIC ---
-                // For example, calling a repository that uses Retrofit, Room, etc.
-                // Replace this delay and placeholder data with your real implementation.
-                delay(1500) // Simulate network delay
+                Log.d("VideoDetailViewModel", "Fetching details for $requestDescription")
+                val apiResponse = youtubeApiService.getVideoDetails(
+                    part = "snippet,contentDetails,statistics",
+                    id = videoId,
+                    apiKey = apiKey
+                )
 
-                // Simulate success
-                // Make sure PlaceholderVideoDetailItem and its nested classes (Snippet, Thumbnails, ContentDetails)
-                // have constructors that match this usage.
-                if (videoId == "known_id_123") { // Example of a successful fetch
-                    _videoDetail.value = PlaceholderVideoDetailItem(
-                        id = videoId,
-                        snippet = PlaceholderVideoDetailItem.Snippet(
-                            title = "Cute Cat Video Compilation #$videoId",
-                            description = "A super cute compilation of cat videos that will make your day better! Enjoy the meows and purrs.",
-                            thumbnails = PlaceholderVideoDetailItem.Thumbnails(
-                                default = PlaceholderVideoDetailItem.Thumbnail("https://i.ytimg.com/vi/$videoId/default.jpg"),
-                                medium = PlaceholderVideoDetailItem.Thumbnail("https://i.ytimg.com/vi/$videoId/mqdefault.jpg"),
-                                high = PlaceholderVideoDetailItem.Thumbnail("https://i.ytimg.com/vi/$videoId/hqdefault.jpg")
+                if (apiResponse.isSuccessful) {
+                    val apiItem = apiResponse.body()?.items?.firstOrNull()
+                    if (apiItem != null) {
+                        // Construct PlaceholderVideoDetailItem directly from API response
+                        _videoDetail.value = PlaceholderVideoDetailItem(
+                            id = apiItem.id ?: videoId, // Use apiItem.id, fallback to passed videoId
+                            snippet = PlaceholderVideoDetailItem.Snippet(
+                                title = apiItem.snippet?.title ?: "No Title",
+                                description = apiItem.snippet?.description ?: "No Description",
+                                thumbnails = PlaceholderVideoDetailItem.Thumbnails(
+                                    default = PlaceholderVideoDetailItem.Thumbnail(apiItem.snippet?.thumbnails?.default?.url ?: ""),
+                                    medium = PlaceholderVideoDetailItem.Thumbnail(apiItem.snippet?.thumbnails?.medium?.url ?: ""),
+                                    high = PlaceholderVideoDetailItem.Thumbnail(apiItem.snippet?.thumbnails?.high?.url ?: "")
+                                ),
+                                channelTitle = apiItem.snippet?.channelTitle ?: "Unknown Channel",
+                                publishedAt = apiItem.snippet?.publishedAt ?: ""
                             ),
-                            channelTitle = "Kitten Fun Times"
-                        ),
-                        contentDetails = PlaceholderVideoDetailItem.ContentDetails(duration = "PT5M20S") // Example: 5 minutes 20 seconds
-                    )
-                } else if (videoId == "error_id_456") { // Example of a simulated error
-                    throw Exception("Video not found or network error for ID: $videoId")
-                } else { // Example of another successful fetch
-                    _videoDetail.value = PlaceholderVideoDetailItem(
-                        id = videoId,
-                        snippet = PlaceholderVideoDetailItem.Snippet(
-                            title = "Exploring the Wonders of $videoId",
-                            description = "Join us on an adventure to explore the fascinating world related to $videoId.",
-                            thumbnails = PlaceholderVideoDetailItem.Thumbnails(
-                                default = PlaceholderVideoDetailItem.Thumbnail("https://i.ytimg.com/vi/$videoId/default.jpg"),
-                                medium = PlaceholderVideoDetailItem.Thumbnail("https://i.ytimg.com/vi/$videoId/mqdefault.jpg"),
-                                high = PlaceholderVideoDetailItem.Thumbnail("https://i.ytimg.com/vi/$videoId/hqdefault.jpg")
+                            contentDetails = PlaceholderVideoDetailItem.ContentDetails(
+                                duration = apiItem.contentDetails?.duration ?: "P0D" // Default to "P0D" if null
                             ),
-                            channelTitle = "Discovery Zone"
-                        ),
-                        contentDetails = PlaceholderVideoDetailItem.ContentDetails(duration = "PT10M05S")
-                    )
+                            statistics = PlaceholderVideoDetailItem.Statistics(
+                                viewCount = apiItem.statistics?.viewCount, // Can be null
+                                likeCount = apiItem.statistics?.likeCount  // Can be null
+                            )
+                        )
+                        Log.d("VideoDetailViewModel", "Successfully mapped details for $requestDescription")
+                    } else {
+                        Log.w("VideoDetailViewModel", "No video details found in API response for $requestDescription. Items list was null or empty.")
+                        _error.value = "Detailed video information not found."
+                    }
+                } else {
+                    val errorBody = apiResponse.errorBody()?.string() ?: "Unknown API error"
+                    var detailedMessage = "API Error (HTTP ${apiResponse.code()}) for $requestDescription"
+                    try {
+                        val errorJson = JSONObject(errorBody)
+                        detailedMessage = errorJson.optJSONObject("error")?.optString("message", apiResponse.message()) ?: detailedMessage
+                    } catch (jsonE: Exception) { /* Ignore if not JSON */ }
+                    Log.e("VideoDetailViewModel", "API call failed: $detailedMessage. Raw: $errorBody")
+                    _error.value = "Failed to load video details: $detailedMessage"
                 }
-                // --- END OF ACTUAL DATA FETCHING LOGIC ---
-
+            } catch (e: HttpException) {
+                Log.e("VideoDetailViewModel", "HttpException for $requestDescription: ${e.message}", e)
+                _error.value = "Network request error: ${e.message}"
+            } catch (e: IOException) {
+                Log.e("VideoDetailViewModel", "IOException for $requestDescription: ${e.message}", e)
+                _error.value = "Network connection error. Please check your connection."
             } catch (e: Exception) {
-                _error.value = e.message ?: "An unknown error occurred while fetching video details."
-                _videoDetail.value = null // Ensure videoDetail is null on error
+                Log.e("VideoDetailViewModel", "Unexpected error for $requestDescription: ${e.message}", e)
+                _error.value = "An unexpected error occurred while fetching details."
             } finally {
                 _isLoading.value = false
+                Log.d("VideoDetailViewModel", "Finished fetching details for $requestDescription. Loading: ${_isLoading.value}, Error: ${_error.value}, Detail: ${_videoDetail.value != null}")
             }
         }
     }

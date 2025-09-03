@@ -17,10 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CardDefaults
@@ -46,12 +44,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+// import androidx.lifecycle.viewmodel.compose.viewModel // No longer creating ViewModel here
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -63,9 +60,10 @@ import com.kawaii.meowbah.ui.screens.videos.formatViewCount
 @Composable
 fun VideosScreen(
     navController: NavController,
-    viewModel: VideosViewModel = viewModel(),
-    profileImageUri: String?
+    viewModel: VideosViewModel // Accept ViewModel as a parameter
 ) {
+    android.util.Log.d("VideosScreen", "ViewModel instance: $viewModel")
+
     val videosState: List<VideoItem> by viewModel.videos.collectAsState()
     val isLoading: Boolean by viewModel.isLoading.collectAsState()
     val errorMessage: String? by viewModel.error.collectAsState()
@@ -74,7 +72,9 @@ fun VideosScreen(
     var searchActive by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        if (!searchActive && videosState.isEmpty()) {
+        // Fetch videos only if the list is empty and not currently searching.
+        // This check helps prevent refetching if the ViewModel is already populated.
+        if (!searchActive && videosState.isEmpty() && !isLoading) {
             viewModel.fetchVideos()
         }
     }
@@ -88,37 +88,14 @@ fun VideosScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 query = searchQuery,
                 onQueryChange = { searchQuery = it },
-                onSearch = { /* searchActive = false */ },
+                onSearch = { /* searchActive = false */ }, // Consider what happens on search submission
                 active = searchActive,
                 onActiveChange = { searchActive = it },
                 placeholder = { Text("Search your library") },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
                 trailingIcon = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { /* TODO: Implement voice search */ }) {
-                            Icon(Icons.Filled.Mic, contentDescription = "Voice search")
-                        }
-                        Spacer(modifier = Modifier.width(4.dp))
-                        val imageModifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                        if (profileImageUri != null) {
-                            AsyncImage(
-                                model = profileImageUri,
-                                placeholder = rememberVectorPainter(image = Icons.Filled.AccountCircle),
-                                error = rememberVectorPainter(image = Icons.Filled.AccountCircle),
-                                contentDescription = "User profile",
-                                modifier = imageModifier,
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.AccountCircle,
-                                contentDescription = "User profile",
-                                modifier = imageModifier,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant // Optional: match placeholder tint
-                            )
-                        }
+                    IconButton(onClick = { /* TODO: Implement voice search */ }) {
+                        Icon(Icons.Filled.Mic, contentDescription = "Voice search")
                     }
                 }
             ) {
@@ -147,7 +124,7 @@ fun VideosScreen(
                                     )
                                 },
                                 modifier = Modifier.clickable {
-                                    searchActive = false
+                                    searchActive = false // Hide search results when item clicked
                                     navController.navigate("video_detail/${video.id}")
                                 }
                             )
@@ -180,8 +157,8 @@ fun VideosScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = innerPadding.calculateBottomPadding() + 8.dp)
                 ) {
                     items(videosState) { video ->
-                        VideoListItem(video = video, onVideoClick = {
-                            navController.navigate("video_detail/${video.id}")
+                        VideoListItem(video = video, onVideoClick = { clickedVideo ->
+                            navController.navigate("video_detail/${clickedVideo.id}")
                         })
                     }
                 }
@@ -199,7 +176,7 @@ fun VideoListItem(video: VideoItem, onVideoClick: (VideoItem) -> Unit) {
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(),
-                onClick = { onVideoClick(video) }
+                onClick = { onVideoClick(video) } 
             ),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
     ) {
@@ -242,7 +219,7 @@ fun VideoListItem(video: VideoItem, onVideoClick: (VideoItem) -> Unit) {
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "${formatViewCount(video.statistics.viewCount.toLongOrNull() ?: 0)} views",
+                        text = "${formatViewCount(video.statistics.viewCount?.toLongOrNull() ?: 0L)} views",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

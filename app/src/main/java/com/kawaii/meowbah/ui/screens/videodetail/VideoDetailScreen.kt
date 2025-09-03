@@ -3,6 +3,7 @@ package com.kawaii.meowbah.ui.screens.videodetail
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -10,91 +11,52 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color // Added import
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+// import androidx.lifecycle.viewmodel.compose.viewModel // No longer creating ViewModel here
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.kawaii.meowbah.R
-import com.kawaii.meowbah.ui.screens.videos.PlaceholderVideoDetailItem
-import java.util.regex.Pattern
+import com.kawaii.meowbah.ui.screens.videos.VideoItem 
+import com.kawaii.meowbah.ui.screens.videos.VideosViewModel 
+import com.kawaii.meowbah.ui.screens.videos.formatViewCount
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+private const val TAG = "VideoDetailScreen"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideoDetailScreen(
     navController: NavController,
-    videoId: String,
-    viewModel: VideoDetailViewModel = viewModel()
+    videoId: String, // Expecting a simple String ID here
+    videosViewModel: VideosViewModel // Accept ViewModel as a parameter
 ) {
-    val videoDetail by viewModel.videoDetail.collectAsState(initial = null)
-    val isLoading by viewModel.isLoading.collectAsState(initial = true)
-    val error by viewModel.error.collectAsState(initial = null)
-    val context = LocalContext.current // Get context for share intent
+    Log.d(TAG, "Composing for videoId: '$videoId'. ViewModel instance: $videosViewModel")
 
-    LaunchedEffect(videoId) {
-        viewModel.fetchVideoDetails(videoId)
+    val videosList by videosViewModel.videos.collectAsState()
+    val isLoadingFromVM by videosViewModel.isLoading.collectAsState() 
+    val errorFromVM by videosViewModel.error.collectAsState()
+
+    Log.d(TAG, "videosList size: ${videosList.size}. First item ID (if any): ${videosList.firstOrNull()?.id}. IsLoading: $isLoadingFromVM, Error: $errorFromVM")
+
+    val videoItem = remember(videosList, videoId) {
+        // Ensure videoId is treated as a simple string for comparison
+        val idToFind = videoId.trim().removeSurrounding("\"") // Basic sanitization
+        val foundItem = videosList.find { it.id == idToFind }
+        Log.d(TAG, "Finding videoId (sanitized): '$idToFind'. Found item: ${foundItem != null}. Item Desc: ${foundItem?.snippet?.localized?.description?.take(30)}..., Item PubAt: ${foundItem?.snippet?.publishedAt}")
+        foundItem
     }
 
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
-
     Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            MediumTopAppBar(
-                title = {
-                    val titleText = when {
-                        isLoading -> "Loading..."
-                        videoDetail != null -> videoDetail?.snippet?.title ?: "Video Detail"
-                        error != null -> "Error"
-                        else -> "Video Detail"
-                    }
-                    Text(
-                        text = titleText,
-                        maxLines = if (scrollBehavior.state.collapsedFraction > 0.5) 1 else 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        videoDetail?.let { detail ->
-                            val shareIntent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                putExtra(Intent.EXTRA_TEXT, "Check out this video: http://www.youtube.com/watch?v=${detail.id}")
-                                type = "text/plain"
-                            }
-                            context.startActivity(Intent.createChooser(shareIntent, "Share video via"))
-                        }
-                    }) {
-                        Icon(Icons.Filled.Share, contentDescription = "Share video")
-                    }
-                },
-                colors = TopAppBarDefaults.mediumTopAppBarColors(
-                    containerColor = Color.Transparent, // Changed
-                    titleContentColor = MaterialTheme.colorScheme.onSurface, // Adjusted
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface, // Adjusted
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurface, // Adjusted
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                scrollBehavior = scrollBehavior
-            )
-        }
+        modifier = Modifier.fillMaxSize()
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -102,12 +64,14 @@ fun VideoDetailScreen(
                 .padding(paddingValues)
         ) {
             when {
-                isLoading -> {
+                isLoadingFromVM && videoItem == null -> {
+                    Log.d(TAG, "Showing loading indicator (isLoadingFromVM && videoItem == null)")
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
-                error != null -> {
+                errorFromVM != null && videoItem == null -> {
+                    Log.d(TAG, "Showing error: $errorFromVM (errorFromVM != null && videoItem == null)")
                     Text(
-                        text = "Error: $error",
+                        text = "Error: $errorFromVM",
                         color = MaterialTheme.colorScheme.error,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
@@ -115,13 +79,15 @@ fun VideoDetailScreen(
                             .padding(16.dp)
                     )
                 }
-                videoDetail != null -> {
-                    val detail = videoDetail!!
-                    VideoDetailContent(detail = detail)
+                videoItem != null -> {
+                    Log.d(TAG, "Showing VideoDetailContent for videoId: ${videoItem.id}")
+                    VideoDetailContent(videoItem = videoItem, navController = navController)
                 }
-                else -> {
+                else -> { 
+                    Log.d(TAG, "Showing fallback: Video details not found for ID '$videoId'. isLoading: $isLoadingFromVM, error: $errorFromVM, videoListSize: ${videosList.size}")
                     Text(
-                        "No video details available.",
+                        "Video details not found. It might have been removed or the ID is incorrect.",
+                        textAlign = TextAlign.Center,
                         modifier = Modifier
                             .align(Alignment.Center)
                             .padding(16.dp)
@@ -133,7 +99,10 @@ fun VideoDetailScreen(
 }
 
 @Composable
-fun VideoDetailContent(detail: PlaceholderVideoDetailItem) {
+fun VideoDetailContent(
+    videoItem: VideoItem,
+    navController: NavController
+) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
 
@@ -141,10 +110,29 @@ fun VideoDetailContent(detail: PlaceholderVideoDetailItem) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilledTonalIconButton(onClick = { navController.popBackStack() }) {
+                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            FilledTonalIconButton(onClick = {
+                val shareIntent = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    putExtra(Intent.EXTRA_TEXT, "Check out this video: http://www.youtube.com/watch?v=${videoItem.id}")
+                    type = "text/plain"
+                }
+                context.startActivity(Intent.createChooser(shareIntent, "Share video via"))
+            }) {
+                Icon(imageVector = Icons.Filled.Share, contentDescription = "Share video")
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
         ElevatedCard(
             shape = MaterialTheme.shapes.medium,
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
@@ -153,10 +141,10 @@ fun VideoDetailContent(detail: PlaceholderVideoDetailItem) {
                 .aspectRatio(16f / 9f)
         ) {
             AsyncImage(
-                model = detail.snippet?.thumbnails?.high?.url
-                    ?: detail.snippet?.thumbnails?.medium?.url
-                    ?: detail.snippet?.thumbnails?.default?.url,
-                contentDescription = "Video thumbnail for ${detail.snippet?.title}",
+                model = videoItem.snippet.thumbnails.high.url
+                    ?: videoItem.snippet.thumbnails.medium.url
+                    ?: videoItem.snippet.thumbnails.default.url,
+                contentDescription = "Video thumbnail for ${videoItem.snippet.title}",
                 contentScale = ContentScale.Crop,
                 placeholder = painterResource(id = R.drawable.ic_placeholder),
                 error = painterResource(id = R.drawable.ic_placeholder),
@@ -165,9 +153,8 @@ fun VideoDetailContent(detail: PlaceholderVideoDetailItem) {
         }
 
         Text(
-            text = detail.snippet?.title ?: "No Title",
+            text = videoItem.snippet.title,
             style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Start,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -177,75 +164,90 @@ fun VideoDetailContent(detail: PlaceholderVideoDetailItem) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = detail.snippet?.channelTitle ?: "Unknown Channel",
+                text = videoItem.snippet.channelTitle ?: "Unknown Channel",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            detail.contentDetails?.duration?.let { isoDuration ->
-                Text(
-                    text = formatDuration(isoDuration),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        }
+        
+        Text(
+            text = formatPublishedAtDate(videoItem.snippet.publishedAt),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        videoItem.statistics?.let { stats ->
+             if (stats.viewCount != null || stats.likeCount != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    stats.viewCount?.toLongOrNull()?.let {
+                        Text(
+                            text = formatViewCount(it) + " views",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    stats.likeCount?.let { likeCount ->
+                        if (stats.viewCount != null && likeCount != "...") {
+                             Text(
+                                text = "•",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (likeCount != "...") { 
+                            Text(
+                                text = "$likeCount likes",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
         }
 
         Text(
-            text = detail.snippet?.description ?: "No description available.",
+            text = videoItem.snippet.localized.description,
             style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Start,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         FilledTonalButton(
             onClick = {
-                val appIntent = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:${detail.id}"))
-                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("http://www.youtube.com/watch?v=${detail.id}"))
+                val appIntent = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:${videoItem.id}"))
+                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("http://www.youtube.com/watch?v=${videoItem.id}"))
                 try {
                     context.startActivity(appIntent)
                 } catch (ex: ActivityNotFoundException) {
                     context.startActivity(webIntent)
                 }
             },
-            modifier = Modifier.fillMaxWidth(0.8f)
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+                           .fillMaxWidth(0.8f)
         ) {
             Text("Open in YouTube")
         }
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
-fun formatDuration(isoDuration: String?): String {
-    if (isoDuration.isNullOrBlank()) return ""
-
-    val pattern = Pattern.compile("PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?")
-    val matcher = pattern.matcher(isoDuration)
-
-    if (matcher.matches()) {
-        val hours = matcher.group(1)?.toLong() ?: 0L
-        val minutes = matcher.group(2)?.toLong() ?: 0L
-        val seconds = matcher.group(3)?.toLong() ?: 0L
-
-        val totalSeconds = hours * 3600 + minutes * 60 + seconds
-
-        val displayHours = totalSeconds / 3600
-        val displayMinutes = (totalSeconds % 3600) / 60
-        val displaySeconds = totalSeconds % 60
-
-        return buildString {
-            if (displayHours > 0) {
-                append(String.format("%d:", displayHours))
-                append(String.format("%02d:", displayMinutes))
-            } else {
-                append(String.format("%d:", displayMinutes))
-            }
-            append(String.format("%02d", displaySeconds))
-        }.removeSuffix(":")
-            .let { if (it.startsWith("0:")) it.substring(2) else it }
-            .let { if (it == "00") "0:00" else it}
-            .let { if (it.isEmpty()) "0:00" else it }
+fun formatPublishedAtDate(isoDate: String?): String {
+    if (isoDate.isNullOrBlank()) return "Unknown date"
+    return try {
+        val odt = OffsetDateTime.parse(isoDate)
+        val formatter = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
+        odt.format(formatter)
+    } catch (e: Exception) {
+        Log.w(TAG, "Error formatting date: $isoDate", e) // Changed to Log.w for visibility
+        "Date unavailable"
     }
-    return "N/A"
 }
-

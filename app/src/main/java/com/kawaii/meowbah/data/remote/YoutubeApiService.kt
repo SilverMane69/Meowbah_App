@@ -2,7 +2,8 @@ package com.kawaii.meowbah.data.remote
 
 import com.kawaii.meowbah.data.YoutubeVideoDetailResponse
 import com.kawaii.meowbah.ui.screens.videos.PlaceholderYoutubeVideoListResponse
-import retrofit2.Response // Added import for Response wrapper
+import retrofit2.Call // ADDED for synchronous calls
+import retrofit2.Response 
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
@@ -17,14 +18,25 @@ interface YoutubeApiService {
         @Query("maxResults") maxResults: Int,
         @Query("type") type: String,
         @Query("order") order: String
-    ): Response<PlaceholderYoutubeVideoListResponse> // Changed return type to Response<T>
+    ): Response<PlaceholderYoutubeVideoListResponse> 
+
+    // ADDED: Synchronous version for use in non-coroutine contexts like AppWidget
+    @GET("search")
+    fun getChannelVideosSync(
+        @Query("part") part: String,
+        @Query("channelId") channelId: String,
+        @Query("key") apiKey: String,
+        @Query("maxResults") maxResults: Int,
+        @Query("type") type: String,
+        @Query("order") order: String
+    ): Call<PlaceholderYoutubeVideoListResponse> // Returns Call<T>
 
     @GET("videos")
     suspend fun getVideoDetails(
         @Query("part") part: String,
         @Query("id") id: String,
         @Query("key") apiKey: String
-    ): Response<YoutubeVideoDetailResponse> // Also ensuring this returns Response<T> for consistency
+    ): Response<YoutubeVideoDetailResponse> 
 
     companion object {
         private const val BASE_URL = "https://www.googleapis.com/youtube/v3/"

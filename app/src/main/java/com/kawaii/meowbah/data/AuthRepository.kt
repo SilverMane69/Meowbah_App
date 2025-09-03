@@ -10,8 +10,8 @@ class AuthRepository(private val authApiService: AuthApiService) {
 
     companion object {
         private const val TAG = "AuthRepository"
-        // Your Android app's client ID from Google Cloud Console
-        private const val CLIENT_ID = "1017808544125-taqamrcgk5n6rbm0llubi8t1dge6hi4c.apps.googleusercontent.com"
+        // Web Client ID from Google API Console, used for server-side validation/exchange
+        private const val CLIENT_ID = "691684333330-k4a1q7tq2cbfm023mal00h1h1ffd6g2q.apps.googleusercontent.com" // CORRECTED CLIENT_ID
         private const val GRANT_TYPE_AUTH_CODE = "authorization_code"
         // private const val GRANT_TYPE_REFRESH_TOKEN = "refresh_token" // For later
     }
@@ -19,10 +19,10 @@ class AuthRepository(private val authApiService: AuthApiService) {
     suspend fun exchangeCodeForTokens(authCode: String): Result<TokenResponse> {
         return withContext(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Attempting to exchange auth code for tokens. Auth Code Length: ${authCode.length}") // Log length for privacy
+                Log.d(TAG, "Attempting to exchange auth code for tokens. Auth Code Length: ${authCode.length}")
                 val response = authApiService.exchangeAuthCodeForToken(
                     grantType = GRANT_TYPE_AUTH_CODE,
-                    clientId = CLIENT_ID,
+                    clientId = CLIENT_ID, // Uses the corrected CLIENT_ID above
                     authCode = authCode
                 )
 

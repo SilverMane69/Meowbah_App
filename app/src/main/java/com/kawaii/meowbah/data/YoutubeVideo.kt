@@ -40,25 +40,11 @@ data class Thumbnail(
     @SerializedName("height") val height: Int
 )
 
-// --- Data classes for Video Detail ---
-
-// This is the response wrapper for the /videos endpoint when fetching by ID
-data class YoutubeVideoDetailResponse(
-    @SerializedName("items") val items: List<YoutubeVideoDetailItem>
-)
-
-// This represents a single, detailed video item
-data class YoutubeVideoDetailItem(
-    @SerializedName("id") val id: String, // For video details, id is a direct String
-    @SerializedName("snippet") val snippet: VideoSnippet, // Reuses existing VideoSnippet
-    @SerializedName("contentDetails") val contentDetails: YoutubeContentDetails
-)
-
-// This holds content details like duration for a single video
-data class YoutubeContentDetails(
-    @SerializedName("duration") val duration: String
-    // Add other fields from contentDetails like definition, dimension, etc. if needed
-)
+// --- Data classes for Video Detail (REMOVED - Now in YoutubeVideoDetailResponse.kt) ---
+// The following were removed to prevent redeclaration:
+// data class YoutubeVideoDetailResponse(...)
+// data class YoutubeVideoDetailItem(...)
+// data class YoutubeContentDetails(...)
 
 // --- YoutubeRepository class added here ---
 class YoutubeRepository(private val youtubeApiService: YoutubeApiService) {

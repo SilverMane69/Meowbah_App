@@ -1,13 +1,13 @@
 package com.kawaii.meowbah.ui.screens
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+// import android.content.Intent // No longer needed
+// import android.net.Uri // No longer needed
+// import androidx.activity.compose.rememberLauncherForActivityResult // No longer needed
+// import androidx.activity.result.contract.ActivityResultContracts // No longer needed
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+// import androidx.compose.foundation.layout.Box // No longer needed
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,18 +15,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+// import androidx.compose.foundation.layout.size // No longer needed for profile image
+// import androidx.compose.foundation.layout.width // No longer needed for profile image buttons
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+// import androidx.compose.foundation.shape.CircleShape // No longer needed
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
+// import androidx.compose.material.icons.filled.AccountCircle // No longer needed for placeholder
 import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MusicNote // Optional: for music toggle
-import androidx.compose.material.icons.filled.MusicOff // Optional: for music toggle
+// import androidx.compose.material.icons.filled.Delete // No longer needed
+// import androidx.compose.material.icons.filled.Edit // No longer needed
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.MusicOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -46,14 +46,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.layout.ContentScale
+// import androidx.compose.ui.draw.clip // No longer needed
+// import androidx.compose.ui.graphics.vector.rememberVectorPainter // No longer needed
+// import androidx.compose.ui.layout.ContentScale // No longer needed
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController // Changed import back
-import coil.compose.AsyncImage
+import androidx.navigation.NavController
+// import coil.compose.AsyncImage // No longer needed
 import com.kawaii.meowbah.ui.theme.AvailableTheme
 import com.kawaii.meowbah.ui.theme.allThemes
 
@@ -63,14 +63,12 @@ private const val KEY_USER_BIO = "userBio"
 
 @Composable
 fun ProfileScreen(
-    navController: NavController, // Changed type back to NavController
+    navController: NavController,
     currentAppTheme: AvailableTheme,
     onThemeChange: (AvailableTheme) -> Unit,
     onLogout: () -> Unit,
-    profileImageUri: String?,
-    onProfileImageUriChange: (String?) -> Unit,
-    isLoginMusicEnabled: Boolean, // New parameter
-    onLoginMusicEnabledChange: (Boolean) -> Unit // New parameter
+    isLoginMusicEnabled: Boolean,
+    onLoginMusicEnabledChange: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
     var showThemeDialog by remember { mutableStateOf(false) }
@@ -84,20 +82,7 @@ fun ProfileScreen(
         userBio = sharedPrefs.getString(KEY_USER_BIO, "") ?: ""
     }
 
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent(),
-        onResult = { uri: Uri? ->
-            uri?.let {
-                try {
-                    val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    context.contentResolver.takePersistableUriPermission(uri, takeFlags)
-                } catch (e: SecurityException) {
-                    // Log.e("ProfileScreen", "Failed to take persistable URI permission for $uri", e)
-                }
-                onProfileImageUriChange(it.toString())
-            }
-        }
-    )
+    // imagePickerLauncher removed
 
     Column(
         modifier = Modifier
@@ -107,48 +92,8 @@ fun ProfileScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Card(
-            shape = CircleShape,
-            modifier = Modifier
-                .size(120.dp)
-                .clickable { imagePickerLauncher.launch("image/*") },
-            elevation = CardDefaults.cardElevation(4.dp)
-        ) {
-            val imageModifier = Modifier.fillMaxSize().clip(CircleShape)
-            if (profileImageUri != null) {
-                AsyncImage(
-                    model = profileImageUri,
-                    placeholder = rememberVectorPainter(image = Icons.Filled.AccountCircle),
-                    error = rememberVectorPainter(image = Icons.Filled.AccountCircle),
-                    contentDescription = "Profile picture",
-                    modifier = imageModifier,
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(modifier = imageModifier, contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Filled.AccountCircle,
-                        contentDescription = "Profile picture placeholder",
-                        modifier = Modifier.size(80.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)){
-            Button(onClick = { imagePickerLauncher.launch("image/*") }) {
-                Icon(Icons.Filled.Edit, contentDescription = "Change picture")
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Change")
-            }
-            if (profileImageUri != null) {
-                Button(onClick = { onProfileImageUriChange(null) }) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Remove picture")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Remove")
-                }
-            }
-        }
+        // Profile Image Card and Buttons removed
+        Spacer(modifier = Modifier.height(32.dp)) // Added spacer for visual balance
 
         OutlinedTextField(
             value = userName,
