@@ -1,6 +1,9 @@
 package com.kawaii.meowbah.data
 
 import com.google.gson.annotations.SerializedName
+import com.kawaii.meowbah.data.remote.YoutubeApiService // Added for YoutubeRepository
+import com.kawaii.meowbah.ui.screens.videos.PlaceholderYoutubeVideoListResponse // Added for YoutubeRepository
+import retrofit2.Response // Added for YoutubeRepository
 
 // Response for a list of videos (e.g., from search or playlist)
 data class YoutubeVideoListResponse(
@@ -56,3 +59,24 @@ data class YoutubeContentDetails(
     @SerializedName("duration") val duration: String
     // Add other fields from contentDetails like definition, dimension, etc. if needed
 )
+
+// --- YoutubeRepository class added here ---
+class YoutubeRepository(private val youtubeApiService: YoutubeApiService) {
+    suspend fun getChannelVideos(
+        part: String,
+        channelId: String,
+        apiKey: String,
+        maxResults: Int,
+        type: String,
+        order: String
+    ): Response<PlaceholderYoutubeVideoListResponse> {
+        return youtubeApiService.getChannelVideos(
+            part = part,
+            channelId = channelId,
+            apiKey = apiKey,
+            maxResults = maxResults,
+            type = type,
+            order = order
+        )
+    }
+}

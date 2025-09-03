@@ -1,0 +1,11 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:updatePeriodMillis="86400000"
+    android:previewImage="@mipmap/ic_launcher"
+    android:initialLayout="@layout/video_widget_layout"
+    android:configure="com.kawaii.meowbah.widgets.VideoWidgetConfigureActivity"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/video_widget_description">
+</appwidget-provider>

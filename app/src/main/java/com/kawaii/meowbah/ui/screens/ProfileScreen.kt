@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MusicNote // Optional: for music toggle
+import androidx.compose.material.icons.filled.MusicOff // Optional: for music toggle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -32,14 +34,14 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField // Added import
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect // Added import
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember // Keep for other remember usages
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,34 +52,32 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
+import androidx.navigation.NavController // Changed import back
 import coil.compose.AsyncImage
 import com.kawaii.meowbah.ui.theme.AvailableTheme
 import com.kawaii.meowbah.ui.theme.allThemes
 
-// SharedPreferences Keys (can be moved to a constants file or MainActivity later)
 private const val PREFS_NAME_PROFILE = "MeowbahProfilePrefs"
 private const val KEY_USER_NAME = "userName"
 private const val KEY_USER_BIO = "userBio"
 
 @Composable
 fun ProfileScreen(
-    navController: NavController,
+    navController: NavController, // Changed type back to NavController
     currentAppTheme: AvailableTheme,
     onThemeChange: (AvailableTheme) -> Unit,
     onLogout: () -> Unit,
     profileImageUri: String?,
-    onProfileImageUriChange: (String?) -> Unit
+    onProfileImageUriChange: (String?) -> Unit,
+    isLoginMusicEnabled: Boolean, // New parameter
+    onLoginMusicEnabledChange: (Boolean) -> Unit // New parameter
 ) {
     val context = LocalContext.current
     var showThemeDialog by remember { mutableStateOf(false) }
 
-    // State for User Name and Bio
     var userName by rememberSaveable { mutableStateOf("") }
     var userBio by rememberSaveable { mutableStateOf("") }
 
-    // Load initial values from SharedPreferences
     LaunchedEffect(Unit) {
         val sharedPrefs = context.getSharedPreferences(PREFS_NAME_PROFILE, Context.MODE_PRIVATE)
         userName = sharedPrefs.getString(KEY_USER_NAME, "User Name") ?: "User Name"
@@ -150,7 +150,6 @@ fun ProfileScreen(
             }
         }
 
-        // User Name TextField
         OutlinedTextField(
             value = userName,
             onValueChange = {
@@ -167,7 +166,6 @@ fun ProfileScreen(
             textStyle = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
         )
 
-        // User Bio TextField
         OutlinedTextField(
             value = userBio,
             onValueChange = {
@@ -179,7 +177,7 @@ fun ProfileScreen(
                 }
             },
             label = { Text("Bio") },
-            modifier = Modifier.fillMaxWidth().height(100.dp), // Adjust height as needed
+            modifier = Modifier.fillMaxWidth().height(100.dp),
             maxLines = 3
         )
 
@@ -211,14 +209,40 @@ fun ProfileScreen(
             }, onDismiss = { showThemeDialog = false })
         }
 
+        // Login Music Toggle Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(2.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // .clickable { onLoginMusicEnabledChange(!isLoginMusicEnabled) } // Optional: make whole row clickable
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Login Music", style = MaterialTheme.typography.titleMedium)
+                Switch(
+                    checked = isLoginMusicEnabled,
+                    onCheckedChange = onLoginMusicEnabledChange,
+                    thumbContent = {
+                        if (isLoginMusicEnabled) {
+                            Icon(Icons.Filled.MusicNote, contentDescription = "Music Enabled")
+                        } else {
+                            Icon(Icons.Filled.MusicOff, contentDescription = "Music Disabled")
+                        }
+                    }
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.weight(1f))
 
         Button(
             onClick = {
                 onLogout()
-                navController.navigate("login") {
-                    popUpTo(navController.graph.id) { inclusive = true }
-                }
+                // Navigation to login is handled by AppNavigation's LaunchedEffect when isLoggedIn becomes false
             },
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -248,7 +272,7 @@ fun ThemePickerDialog(
                     ) {
                         Switch(
                             checked = theme == currentTheme,
-                            onCheckedChange = { onThemeSelected(theme) },
+                            onCheckedChange = { onThemeSelected(theme) }, // This directly selects the theme
                             modifier = Modifier.padding(end = 16.dp)
                         )
                         Text(theme.displayName)

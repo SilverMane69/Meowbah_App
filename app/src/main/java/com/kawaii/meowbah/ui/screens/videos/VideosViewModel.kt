@@ -2,7 +2,7 @@ package com.kawaii.meowbah.ui.screens.videos
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.kawaii.meowbah.BuildConfig // Added import for BuildConfig
+import com.kawaii.meowbah.BuildConfig
 import com.kawaii.meowbah.data.remote.YoutubeApiService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,6 +13,7 @@ import android.util.Log
 import org.json.JSONObject
 import retrofit2.HttpException
 import java.io.IOException
+import retrofit2.Response // Added import for Retrofit Response
 
 // --- Placeholder Data Classes for API Interaction ---
 
@@ -78,54 +79,81 @@ class VideosViewModel : ViewModel() {
             .create(YoutubeApiService::class.java)
     }
 
-    // API key is now fetched from BuildConfig
     private val apiKey = BuildConfig.YOUTUBE_API_KEY 
-    private val channelId = "UCNytjdD5-KZInxjVeWV_qQw"
+    private val channelId = "UCNytjdD5-KZInxjVeWV_qQw" // TODO: Replace with actual Meowbah channel ID if different
 
     fun fetchVideos() {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
-            // Request description for logging - API key value is not directly logged here.
             val requestDescription = "youtubeApiService.getChannelVideos(channelId=$channelId)"
             try {
-                val response: PlaceholderYoutubeVideoListResponse = youtubeApiService.getChannelVideos(
-                    part = "snippet,id",
+                val apiResponse: Response<PlaceholderYoutubeVideoListResponse> = youtubeApiService.getChannelVideos(
+                    part = "snippet,id", // Corrected: ensure 'id' is part of 'part' if PlaceholderId needs it.
                     channelId = channelId,
-                    apiKey = apiKey, // Uses the apiKey from BuildConfig
+                    apiKey = apiKey,
                     maxResults = 20,
                     type = "video",
                     order = "date"
                 )
 
-                _videos.value = response.items.map { apiItem ->
-                    VideoItem(
-                        id = apiItem.id?.videoId ?: "",
-                        snippet = VideoSnippet(
-                            title = apiItem.snippet?.title ?: "No Title",
-                            channelTitle = apiItem.snippet?.channelTitle ?: "No Channel",
-                            localized = LocalizedSnippet(
-                                title = apiItem.snippet?.title ?: "No Title",
-                                description = apiItem.snippet?.description ?: ""
-                            ),
-                            thumbnails = Thumbnails(
-                                default = Thumbnail(url = apiItem.snippet?.thumbnails?.default?.url ?: "", width = 120, height = 90),
-                                medium = Thumbnail(
-                                    url = apiItem.snippet?.thumbnails?.medium?.url ?: "",
-                                    width = 320,
-                                    height = 180
+                if (apiResponse.isSuccessful) {
+                    val placeholderData = apiResponse.body()
+                    if (placeholderData != null) {
+                        _videos.value = placeholderData.items.map { apiItem ->
+                            VideoItem(
+                                id = apiItem.id?.videoId ?: "",
+                                snippet = VideoSnippet(
+                                    title = apiItem.snippet?.title ?: "No Title",
+                                    channelTitle = apiItem.snippet?.channelTitle ?: "No Channel",
+                                    localized = LocalizedSnippet(
+                                        title = apiItem.snippet?.title ?: "No Title",
+                                        description = apiItem.snippet?.description ?: ""
+                                    ),
+                                    thumbnails = Thumbnails(
+                                        default = Thumbnail(url = apiItem.snippet?.thumbnails?.default?.url ?: "", width = 120, height = 90),
+                                        medium = Thumbnail(
+                                            url = apiItem.snippet?.thumbnails?.medium?.url ?: "",
+                                            width = 320,
+                                            height = 180
+                                        ),
+                                        high = Thumbnail(url = apiItem.snippet?.thumbnails?.high?.url ?: "", width = 480, height = 360)
+                                    )
                                 ),
-                                high = Thumbnail(url = apiItem.snippet?.thumbnails?.high?.url ?: "", width = 480, height = 360)
+                                statistics = VideoStatistics(
+                                    viewCount = apiItem.statistics?.viewCount ?: "0"
+                                )
+                                // Assuming ContentDetails like duration are not directly mapped here or fetched separately
                             )
-                        ),
-                        statistics = VideoStatistics(
-                            viewCount = apiItem.statistics?.viewCount ?: "0"
-                        )
-                    )
+                        }
+                        Log.d("VideosViewModel", "Successfully fetched videos for $requestDescription")
+                    } else {
+                        Log.e("VideosViewModel", "API call successful but response body is null for $requestDescription")
+                        _error.value = "Failed to load videos: Empty response from server."
+                        _videos.value = emptyList()
+                    }
+                } else {
+                    val errorBody = apiResponse.errorBody()?.string() ?: "Unknown error"
+                    var detailedMessage = "API Error (HTTP ${apiResponse.code()})"
+                    try {
+                        val errorJson = JSONObject(errorBody)
+                        val specificReason = errorJson.optJSONObject("error")
+                                                   ?.optJSONArray("errors")
+                                                   ?.optJSONObject(0)
+                                                   ?.optString("reason", "Unknown reason")
+                        val apiMessageFromJson = errorJson.optJSONObject("error")
+                                                  ?.optString("message", apiResponse.message()) 
+                        detailedMessage = "API Error (HTTP ${apiResponse.code()}) - Reason: $specificReason, Message: $apiMessageFromJson"
+                    } catch (jsonE: Exception) {
+                        Log.e("VideosViewModel", "Failed to parse error body as JSON: $errorBody", jsonE)
+                        detailedMessage = "API Error (HTTP ${apiResponse.code()}). Could not parse error details. Raw: $errorBody"
+                    }
+                    Log.e("VideosViewModel", "API call failed for $requestDescription. Code: ${apiResponse.code()}, Error: $errorBody")
+                    _error.value = detailedMessage
+                    _videos.value = emptyList()
                 }
-                Log.d("VideosViewModel", "Successfully fetched videos for $requestDescription")
 
-            } catch (e: HttpException) {
+            } catch (e: HttpException) { // Catches other HTTP-related issues not covered by Response.isSuccessful
                 val errorBody = e.response()?.errorBody()?.string() ?: "No error body"
                 var detailedMessage = "HTTP ${e.code()}: ${e.message()}"
                 try {
@@ -140,7 +168,7 @@ class VideosViewModel : ViewModel() {
                 } catch (jsonE: Exception) {
                     Log.e("VideosViewModel", "Failed to parse error body as JSON: $errorBody", jsonE)
                 }
-                Log.e("VideosViewModel", "API Error for $requestDescription. Details: $detailedMessage\nRaw Error Body: $errorBody", e)
+                Log.e("VideosViewModel", "HttpException for $requestDescription. Details: $detailedMessage\nRaw Error Body: $errorBody", e)
                 _error.value = "API Error: $detailedMessage. Please check logs for full error body."
                 _videos.value = emptyList()
             } catch (e: IOException) {

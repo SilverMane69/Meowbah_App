@@ -68,6 +68,7 @@ dependencies {
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
+    implementation("androidx.appcompat:appcompat:1.7.1") // Added AppCompat
     
     // Material 3 and Adaptive Dependencies
     implementation("androidx.compose.material3:material3") 
@@ -79,12 +80,14 @@ dependencies {
 
     implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.material.icons.extended)
-    implementation(libs.retrofit)
-    implementation(libs.converter.gson)
+    implementation(libs.retrofit) // This should be com.squareup.retrofit2:retrofit
+    implementation(libs.converter.gson) // This should be com.squareup.retrofit2:converter-gson
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0") // Added OkHttp Logging Interceptor
     implementation(libs.coil.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.work.runtime.ktx) // Added WorkManager
     implementation("com.google.android.gms:play-services-auth:21.4.0") // Added Google Play Services Auth
+    implementation("androidx.security:security-crypto:1.1.0") // Added for EncryptedSharedPreferences
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

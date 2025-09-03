@@ -6,90 +6,96 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.kawaii.meowbah.BuildConfig
 import com.kawaii.meowbah.data.remote.YoutubeApiService
-import com.kawaii.meowbah.ui.screens.videos.PlaceholderYoutubeVideoListResponse // Using existing placeholder
+import com.kawaii.meowbah.data.YoutubeRepository // Assuming this import is correct and the file/class is accessible
+// Explicitly import PlaceholderYoutubeVideoItem to avoid alias issues
+import com.kawaii.meowbah.ui.screens.videos.PlaceholderYoutubeVideoItem 
+import com.kawaii.meowbah.ui.activities.NotificationUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import retrofit2.HttpException
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
-import org.json.JSONObject
 import java.io.IOException
 
-class YoutubeSyncWorker(
-    appContext: Context,
-    workerParams: WorkerParameters
-) : CoroutineWorker(appContext, workerParams) {
-
-    private val youtubeApiService: YoutubeApiService by lazy {
-        Retrofit.Builder()
-            .baseUrl("https://www.googleapis.com/youtube/v3/")
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(YoutubeApiService::class.java)
-    }
+class YoutubeSyncWorker(appContext: Context, workerParams: WorkerParameters) :
+    CoroutineWorker(appContext, workerParams) {
 
     companion object {
         const val WORK_NAME = "YoutubeSyncWorker"
         private const val TAG = "YoutubeSyncWorker"
+        private const val PREFS_NAME = "YoutubeSyncPrefs"
+        private const val KEY_NOTIFIED_VIDEO_IDS = "notifiedVideoIds"
     }
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.YOUTUBE_API_KEY
-        val channelId = "UCNytjdD5-KZInxjVeWV_qQw" // Meowbah's Channel ID
-        val requestDescription = "YoutubeSyncWorker - getChannelVideos(channelId=$channelId)"
+    override suspend fun doWork(): Result {
+        Log.d(TAG, "Starting Youtube sync work")
+        // This line assumes YoutubeRepository from com.kawaii.meowbah.data is resolved
+        val youtubeRepository = YoutubeRepository(YoutubeApiService.create())
+        val prefs = applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val notifiedVideoIds = prefs.getStringSet(KEY_NOTIFIED_VIDEO_IDS, emptySet()) ?: emptySet()
 
-        if (apiKey.isEmpty()) {
-            Log.e(TAG, "API Key is empty. Cannot perform sync.")
-            return@withContext Result.failure()
-        }
-
-        Log.d(TAG, "Starting YouTube video sync for $requestDescription")
-
-        try {
-            val response: PlaceholderYoutubeVideoListResponse = youtubeApiService.getChannelVideos(
-                part = "snippet,id",
-                channelId = channelId,
-                apiKey = apiKey,
-                maxResults = 25, // Fetches a reasonable number of recent videos
-                type = "video",
-                order = "date"
-            )
-
-            // In a full implementation, you would save response.items to a local database (e.g., Room)
-            // For now, we'll just log the number of items fetched.
-            Log.d(TAG, "Successfully fetched ${response.items.size} videos for $requestDescription.")
-            // Example: response.items.forEach { video -> Log.d(TAG, "Fetched video: ${video.snippet?.title}") }
-            
-            Result.success()
-
-        } catch (e: HttpException) {
-            val errorBody = e.response()?.errorBody()?.string() ?: "No error body"
-            var detailedMessage = "HTTP ${e.code()}: ${e.message()}"
+        return withContext(Dispatchers.IO) {
             try {
-                val errorJson = JSONObject(errorBody)
-                val specificReason = errorJson.optJSONObject("error")
-                                           ?.optJSONArray("errors")
-                                           ?.optJSONObject(0)
-                                           ?.optString("reason", "Unknown reason")
-                val apiMessage = errorJson.optJSONObject("error")
-                                          ?.optString("message", e.message()) 
-                detailedMessage = "API Error (HTTP ${e.code()}) - Reason: $specificReason, Message: $apiMessage"
-            } catch (jsonE: Exception) {
-                Log.e(TAG, "Failed to parse error body as JSON for $requestDescription: $errorBody", jsonE)
-            }
-            Log.e(TAG, "API Error for $requestDescription. Details: $detailedMessage\nRaw Error Body: $errorBody", e)
-            // Retry if it's a server error (5xx) or potentially a rate limit issue (though 403 usually isn't transient for this API)
-            if (e.code() >= 500) {
+                val response = youtubeRepository.getChannelVideos(
+                    part = "snippet", 
+                    channelId = "UCzUnbX-2S2mMcfdd1jR2g-Q", 
+                    apiKey = BuildConfig.YOUTUBE_API_KEY,
+                    maxResults = 10,
+                    type = "video",
+                    order = "date" 
+                )
+
+                if (response.isSuccessful) {
+                    // response.body() is PlaceholderYoutubeVideoListResponse?
+                    // .items is List<PlaceholderYoutubeVideoItem>?
+                    val videoItemList: List<PlaceholderYoutubeVideoItem>? = response.body()?.items
+
+                    if (videoItemList != null) {
+                        Log.d(TAG, "Successfully fetched ${videoItemList.size} videos")
+                        val newNotifiedIds = notifiedVideoIds.toMutableSet()
+                        var newVideosFound = 0
+
+                        // videoItem is now explicitly PlaceholderYoutubeVideoItem
+                        for (videoItem: PlaceholderYoutubeVideoItem in videoItemList.reversed()) { 
+                            // Accessing fields from PlaceholderYoutubeVideoItem, PlaceholderId, PlaceholderSnippet
+                            val videoId = videoItem.id?.videoId 
+                            val videoTitle = videoItem.snippet?.title
+
+                            if (videoId != null && videoTitle != null && !notifiedVideoIds.contains(videoId)) {
+                                Log.d(TAG, "New video found: $videoTitle (ID: $videoId)")
+                                NotificationUtils.showNewVideoNotification(
+                                    applicationContext,
+                                    videoTitle, 
+                                    videoId    
+                                )
+                                newNotifiedIds.add(videoId) 
+                                newVideosFound++
+                            }
+                        }
+
+                        if (newVideosFound > 0) {
+                            prefs.edit().putStringSet(KEY_NOTIFIED_VIDEO_IDS, newNotifiedIds).apply()
+                            Log.d(TAG, "Updated notified video IDs. Total notified: ${newNotifiedIds.size}")
+                        } else {
+                            Log.d(TAG, "No new videos found to notify.")
+                        }
+                        Result.success()
+                    } else {
+                        Log.e(TAG, "Video items list is null or response body is null")
+                        Result.failure()
+                    }
+                } else {
+                    Log.e(TAG, "API call failed with code: ${response.code()}, message: ${response.message()}")
+                    Result.failure()
+                }
+            } catch (e: HttpException) {
+                Log.e(TAG, "HTTP exception during Youtube sync", e)
                 Result.retry()
-            } else {
-                Result.failure() // Don't retry for client errors like 403 immediately without changes
+            } catch (e: IOException) {
+                Log.e(TAG, "IO exception during Youtube sync (likely network issue)", e)
+                Result.retry()
+            } catch (e: Exception) {
+                Log.e(TAG, "Unexpected error during Youtube sync", e)
+                Result.failure()
             }
-        } catch (e: IOException) {
-            Log.e(TAG, "Network Error for $requestDescription: ${e.message}", e)
-            Result.retry() // Network errors are good candidates for retry
-        } catch (e: Exception) {
-            Log.e(TAG, "Unexpected error during $requestDescription: ${e.message}", e)
-            Result.failure()
         }
     }
 }

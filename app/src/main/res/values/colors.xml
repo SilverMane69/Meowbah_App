@@ -7,4 +7,25 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Widget Pink Theme -->
+    <color name="widget_pink_background">#FFFFD8E4</color>
+    <color name="widget_pink_text_primary">#FF3E001E</color>
+    <color name="widget_pink_text_secondary">#FF514347</color>
+
+    <!-- Widget Lavender Theme -->
+    <color name="widget_lavender_background">#FFEADDFF</color>
+    <color name="widget_lavender_text_primary">#FF21005D</color>
+    <color name="widget_lavender_text_secondary">#FF49454F</color>
+
+    <!-- Widget Mint Theme -->
+    <color name="widget_mint_background">#FF9EF8DA</color>
+    <color name="widget_mint_text_primary">#FF002116</color>
+    <color name="widget_mint_text_secondary">#FF3F4944</color>
+
+    <!-- Default Widget Colors (Fallback/MaterialYou Simplification) -->
+    <color name="widget_default_background">#FFFFFFFF</color> <!-- Using white as a neutral default -->
+    <color name="widget_default_text_primary">#FF000000</color>
+    <color name="widget_default_text_secondary">#FF888888</color>
+
 </resources>
