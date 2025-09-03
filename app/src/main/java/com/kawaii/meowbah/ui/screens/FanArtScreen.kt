@@ -10,7 +10,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape // Ensured import for FAB
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+// import androidx.compose.material.icons.automirrored.filled.ArrowBack // No longer needed
 import androidx.compose.material.icons.filled.Add // Added for FAB
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
@@ -81,11 +81,11 @@ fun FanArtScreen(navController: NavController) {
         topBar = {
             LargeTopAppBar(
                 title = { Text("Fan Art Gallery") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
+                // navigationIcon = { // Removed this section
+                //     IconButton(onClick = { navController.popBackStack() }) {
+                //         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                //     }
+                // },
                 colors = TopAppBarDefaults.largeTopAppBarColors(
                     containerColor = Color.Transparent, 
                     titleContentColor = MaterialTheme.colorScheme.onSurface, 

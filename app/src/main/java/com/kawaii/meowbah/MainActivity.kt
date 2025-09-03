@@ -1,15 +1,15 @@
 package com.kawaii.meowbah
 
-import android.app.Activity // Added for Google Sign-In
+import android.app.Activity
 import android.content.Context
-import android.content.Intent // Added for Google Sign-In
+import android.content.Intent
 import android.os.Bundle
-import android.util.Log // Added for Google Sign-In logging
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.ActivityResultLauncher // Added for Google Sign-In
-import androidx.activity.result.contract.ActivityResultContracts // Added for Google Sign-In
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,12 +51,12 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import com.google.android.gms.auth.api.signin.GoogleSignIn // Added for Google Sign-In
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount // Added for Google Sign-In
-import com.google.android.gms.auth.api.signin.GoogleSignInClient // Added for Google Sign-In
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions // Added for Google Sign-In
-import com.google.android.gms.common.api.ApiException // Added for Google Sign-In
-import com.google.android.gms.tasks.Task // Added for Google Sign-In
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.tasks.Task
 import com.kawaii.meowbah.ui.screens.FanArtScreen
 import com.kawaii.meowbah.ui.screens.LoginScreen
 import com.kawaii.meowbah.ui.screens.ProfileScreen
@@ -89,11 +89,12 @@ class MainActivity : ComponentActivity() {
 
     private val PREFS_NAME = "MeowbahAppPreferences"
     private val KEY_SELECTED_THEME = "selectedTheme"
-    private val TAG = "MainActivityGoogleSignIn" // For logging
+    private val KEY_PROFILE_IMAGE_URI = "profileImageUri" // Added key
+    private val TAG = "MainActivityGoogleSignIn"
 
     private lateinit var googleSignInClient: GoogleSignInClient
     private lateinit var googleSignInLauncher: ActivityResultLauncher<Intent>
-    private lateinit var onLoginSuccessState: () -> Unit // To hold the onLoginSuccess lambda
+    private lateinit var onLoginSuccessState: () -> Unit
 
     private fun saveThemePreference(theme: AvailableTheme) {
         val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -103,11 +104,30 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    fun loadThemePreference(): AvailableTheme {
+    private fun loadThemePreference(): AvailableTheme {
         val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val themeName = sharedPrefs.getString(KEY_SELECTED_THEME, null)
         return allThemes.firstOrNull { it.displayName == themeName } ?: AvailableTheme.Pink
     }
+
+    // --- Profile Image URI --- 
+    private fun saveProfileImageUriPreference(uri: String?) {
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        with(sharedPrefs.edit()) {
+            if (uri == null) {
+                remove(KEY_PROFILE_IMAGE_URI)
+            } else {
+                putString(KEY_PROFILE_IMAGE_URI, uri)
+            }
+            apply()
+        }
+    }
+
+    private fun loadProfileImageUriPreference(): String? {
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return sharedPrefs.getString(KEY_PROFILE_IMAGE_URI, null)
+    }
+    // --- End Profile Image URI ---
 
     private fun startGoogleSignIn() {
         val signInIntent = googleSignInClient.signInIntent
@@ -117,13 +137,9 @@ class MainActivity : ComponentActivity() {
     private fun handleGoogleSignInResult(task: Task<GoogleSignInAccount>) {
         try {
             val account = task.getResult(ApiException::class.java)
-            // Signed in successfully
             Log.d(TAG, "Google Sign-In successful. Name: ${account?.displayName}, Email: ${account?.email}")
-            // You can now get the ID token if you configured .requestIdToken(YOUR_WEB_CLIENT_ID)
-            // val idToken = account?.idToken
-            // TODO: Send ID Token to your backend server for verification if needed
             if (::onLoginSuccessState.isInitialized) {
-                onLoginSuccessState() // Call the onLoginSuccess lambda from setContent
+                onLoginSuccessState()
             }
         } catch (e: ApiException) {
             Log.w(TAG, "Google Sign-In failed code=${e.statusCode} message=${e.message}")
@@ -135,7 +151,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         scheduleYoutubeSync()
 
-        // Configure Google Sign-In launcher
         googleSignInLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) { result ->
@@ -147,11 +162,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Configure Google Sign-In options
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken("691684333330-k4a1q7tq2cbfm023mal00h1h1ffd6g2q.apps.googleusercontent.com") // Replaced placeholder
+            .requestIdToken("691684333330-k4a1q7tq2cbfm023mal00h1h1ffd6g2q.apps.googleusercontent.com")
             .requestEmail()
-            .requestProfile() // requestProfile is optional if you only need email and ID token
+            .requestProfile()
             .build()
 
         googleSignInClient = GoogleSignIn.getClient(this, gso)
@@ -165,15 +179,26 @@ class MainActivity : ComponentActivity() {
             } }
 
             var isLoggedIn by rememberSaveable { mutableStateOf(false) }
-            // Assign the lambda that changes isLoggedIn to the member variable
             onLoginSuccessState = remember { { isLoggedIn = true } }
-            val onLogout: () -> Unit = remember { { isLoggedIn = false } }
+            val onLogout: () -> Unit = remember { {
+                isLoggedIn = false
+                // Optionally, clear profile image on logout
+                // saveProfileImageUriPreference(null) 
+                // currentProfileImageUri = null
+            } }
 
             var selectedTabRoute by rememberSaveable {
                 mutableStateOf(BottomNavItem.Videos.route)
             }
             val onSelectedTabRouteChange: (String) -> Unit = remember { { newRoute ->
                 selectedTabRoute = newRoute
+            } }
+
+            // Profile Image URI State
+            var currentProfileImageUri by rememberSaveable { mutableStateOf(loadProfileImageUriPreference()) }
+            val onProfileImageUriChange: (String?) -> Unit = remember { { newUri ->
+                saveProfileImageUriPreference(newUri)
+                currentProfileImageUri = newUri
             } }
 
             MeowbahTheme(currentSelectedTheme = currentAppTheme) {
@@ -184,11 +209,13 @@ class MainActivity : ComponentActivity() {
                         currentAppTheme = currentAppTheme,
                         onThemeChange = onThemeChange,
                         isLoggedIn = isLoggedIn,
-                        onLoginSuccess = onLoginSuccessState, // Pass the stored lambda
+                        onLoginSuccess = onLoginSuccessState,
                         onLogout = onLogout,
                         selectedTabRoute = selectedTabRoute,
                         onSelectedTabRouteChange = onSelectedTabRouteChange,
-                        onGoogleSignInRequested = ::startGoogleSignIn // Pass the sign-in function reference
+                        onGoogleSignInRequested = ::startGoogleSignIn,
+                        profileImageUri = currentProfileImageUri, // Pass state
+                        onProfileImageUriChange = onProfileImageUriChange // Pass setter
                     )
                 }
             }
@@ -223,7 +250,9 @@ fun AppNavigation(
     onLogout: () -> Unit,
     selectedTabRoute: String,
     onSelectedTabRouteChange: (String) -> Unit,
-    onGoogleSignInRequested: () -> Unit // Added callback for Google Sign-In
+    onGoogleSignInRequested: () -> Unit,
+    profileImageUri: String?, // Added parameter
+    onProfileImageUriChange: (String?) -> Unit // Added parameter
 ) {
     val navController = rememberNavController()
 
@@ -254,7 +283,7 @@ fun AppNavigation(
                     onSignUpClicked = { /* TODO */ },
                     onForgotPasswordClicked = { /* TODO */ },
                     onGuestLoginClicked = { onLoginSuccess() },
-                    onGoogleSignInClicked = onGoogleSignInRequested // Pass the callback to LoginScreen
+                    onGoogleSignInClicked = onGoogleSignInRequested
                 )
             }
         }
@@ -266,7 +295,9 @@ fun AppNavigation(
                     onLogout = onLogout,
                     mainNavController = navController,
                     selectedTabRoute = selectedTabRoute,
-                    onSelectedTabRouteChange = onSelectedTabRouteChange
+                    onSelectedTabRouteChange = onSelectedTabRouteChange,
+                    profileImageUri = profileImageUri, // Pass through
+                    onProfileImageUriChange = onProfileImageUriChange // Pass through
                 )
             }
         }
@@ -280,7 +311,9 @@ fun MainScreen(
     onLogout: () -> Unit,
     mainNavController: NavController,
     selectedTabRoute: String,
-    onSelectedTabRouteChange: (String) -> Unit
+    onSelectedTabRouteChange: (String) -> Unit,
+    profileImageUri: String?, // Added parameter
+    onProfileImageUriChange: (String?) -> Unit // Added parameter
 ) {
     val innerNavController = rememberNavController()
     val navBackStackEntry by innerNavController.currentBackStackEntryAsState()
@@ -302,8 +335,8 @@ fun MainScreen(
         bottomBar = {
             NavigationBar(
                 modifier = Modifier
-                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp) 
-                    .clip(RoundedCornerShape(16.dp)) 
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                    .clip(RoundedCornerShape(16.dp))
             ) {
                 bottomNavItems.forEach { screen ->
                     NavigationBarItem(
@@ -333,15 +366,20 @@ fun MainScreen(
             modifier = Modifier.padding(paddingValues).fillMaxSize()
         ) {
             composable(BottomNavItem.Videos.route) {
-                VideosScreen(navController = innerNavController)
+                VideosScreen(
+                    navController = innerNavController, 
+                    profileImageUri = profileImageUri // Pass to VideosScreen
+                )
             }
             composable(BottomNavItem.FanArt.route) { FanArtScreen(navController = innerNavController) }
             composable(BottomNavItem.Profile.route) { 
                 ProfileScreen(
-                    navController = mainNavController,
+                    navController = mainNavController, // This seems to be the outer NavController for login/main
                     currentAppTheme = currentAppTheme,
                     onThemeChange = onThemeChange,
-                    onLogout = onLogout
+                    onLogout = onLogout,
+                    profileImageUri = profileImageUri, // Pass to ProfileScreen
+                    onProfileImageUriChange = onProfileImageUriChange // Pass to ProfileScreen
                 ) 
             }
             composable(

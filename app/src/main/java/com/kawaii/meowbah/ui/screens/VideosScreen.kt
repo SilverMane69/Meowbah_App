@@ -2,11 +2,13 @@ package com.kawaii.meowbah.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,26 +17,23 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CardDefaults 
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DockedSearchBar
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem 
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SearchBar
-// import androidx.compose.material3.SearchBarDefaults // Keep commented or use if specific default tweaks are needed
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState // Added import
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,13 +46,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.isTraversalGroup
-import androidx.compose.ui.semantics.semantics
-// import androidx.compose.ui.semantics.traversalIndex // Not strictly needed for this adjustment
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -68,7 +63,8 @@ import com.kawaii.meowbah.ui.screens.videos.formatViewCount
 @Composable
 fun VideosScreen(
     navController: NavController,
-    viewModel: VideosViewModel = viewModel()
+    viewModel: VideosViewModel = viewModel(),
+    profileImageUri: String?
 ) {
     val videosState: List<VideoItem> by viewModel.videos.collectAsState()
     val isLoading: Boolean by viewModel.isLoading.collectAsState()
@@ -78,104 +74,53 @@ fun VideosScreen(
     var searchActive by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        if (!searchActive) { 
+        if (!searchActive && videosState.isEmpty()) {
             viewModel.fetchVideos()
         }
     }
 
-    // Corrected scrollBehavior for the MediumTopAppBar when search is not active
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
-
-    Box(Modifier.fillMaxSize()) { 
-        Scaffold(
-            modifier = Modifier
-                .fillMaxSize()
-                // Apply nestedScroll only when search is NOT active, as SearchBar handles its own scroll/elevation.
-                .then(if (!searchActive) Modifier.nestedScroll(scrollBehavior.nestedScrollConnection) else Modifier),
-            topBar = {
-                if (!searchActive) {
-                    MediumTopAppBar(
-                        title = { Text("Videos") },
-                        scrollBehavior = scrollBehavior,
-                        colors = TopAppBarDefaults.mediumTopAppBarColors(
-                            containerColor = Color.Transparent,
-                            titleContentColor = MaterialTheme.colorScheme.onSurface,
-                            actionIconContentColor = MaterialTheme.colorScheme.onSurface,
-                            scrolledContainerColor = MaterialTheme.colorScheme.surfaceVariant 
-                        ),
-                        actions = {
-                            IconButton(onClick = { searchActive = true }) {
-                                Icon(Icons.Filled.Search, contentDescription = "Search videos")
-                            }
-                        }
-                    )
-                } // Else: No TopAppBar when SearchBar is active
-            }
-        ) { innerPadding ->
-            Column(
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            DockedSearchBar(
                 modifier = Modifier
-                    .fillMaxSize()
-                    // Use innerPadding from Scaffold only when the main content is shown
-                    .padding(if (!searchActive) innerPadding else PaddingValues(0.dp)) 
-            ) {
-                if (isLoading && !searchActive) { // Show loader only if not searching
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally).padding(16.dp))
-                } else if (errorMessage != null && !searchActive) { // Show error only if not searching
-                    Text(
-                        text = "Error: $errorMessage",
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.align(Alignment.CenterHorizontally).padding(16.dp)
-                    )
-                } else if (!searchActive) {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = innerPadding.calculateBottomPadding() + 8.dp)
-                    ) {
-                        items(videosState) { video ->
-                            VideoListItem(video = video, onVideoClick = {
-                                navController.navigate("video_detail/${video.id}")
-                            })
-                        }
-                    }
-                }
-            }
-        }
-
-        // SearchBar is placed in the Box to overlay Scaffold when active
-        if (searchActive) {
-            SearchBar(
-                modifier = Modifier
-                    .fillMaxWidth() // Ensures SearchBar takes full width when active
-                    .align(Alignment.TopCenter)
-                    .semantics { isTraversalGroup = true },
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 query = searchQuery,
                 onQueryChange = { searchQuery = it },
-                onSearch = { searchActive = false }, 
+                onSearch = { /* searchActive = false */ },
                 active = searchActive,
-                onActiveChange = { 
-                    searchActive = it 
-                    if (!it) {
-                        // Optional: Clear search query when search becomes inactive
-                        // searchQuery = ""
-                    }
-                },
-                placeholder = { Text("Search videos") },
-                leadingIcon = {
-                    IconButton(onClick = { 
-                        searchActive = false 
-                        // searchQuery = "" // Also clear query on back press
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
+                onActiveChange = { searchActive = it },
+                placeholder = { Text("Search your library") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
                 trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Filled.Clear, contentDescription = "Clear search")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { /* TODO: Implement voice search */ }) {
+                            Icon(Icons.Filled.Mic, contentDescription = "Voice search")
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        val imageModifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                        if (profileImageUri != null) {
+                            AsyncImage(
+                                model = profileImageUri,
+                                placeholder = rememberVectorPainter(image = Icons.Filled.AccountCircle),
+                                error = rememberVectorPainter(image = Icons.Filled.AccountCircle),
+                                contentDescription = "User profile",
+                                modifier = imageModifier,
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.AccountCircle,
+                                contentDescription = "User profile",
+                                modifier = imageModifier,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant // Optional: match placeholder tint
+                            )
                         }
                     }
                 }
-                // Rely on default SearchBar colors for system-like appearance
             ) {
                 val filteredVideos = videosState.filter {
                     it.snippet.title.contains(searchQuery, ignoreCase = true) ||
@@ -186,9 +131,10 @@ fun VideosScreen(
                         Text("No results found for \"$searchQuery\"")
                     }
                 } else {
-                    LazyColumn(contentPadding = PaddingValues(16.dp)) {
+                    LazyColumn(
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
+                    ) {
                         items(filteredVideos) { video ->
-                            // Using a more standard ListItem for search results
                             ListItem(
                                 headlineContent = { Text(video.snippet.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 supportingContent = { Text(video.snippet.channelTitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -210,6 +156,37 @@ fun VideosScreen(
                 }
             }
         }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else if (errorMessage != null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "Error: $errorMessage",
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = innerPadding.calculateBottomPadding() + 8.dp)
+                ) {
+                    items(videosState) { video ->
+                        VideoListItem(video = video, onVideoClick = {
+                            navController.navigate("video_detail/${video.id}")
+                        })
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -224,39 +201,39 @@ fun VideoListItem(video: VideoItem, onVideoClick: (VideoItem) -> Unit) {
                 indication = ripple(),
                 onClick = { onVideoClick(video) }
             ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Column {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(video.snippet.thumbnails.medium.url)
+                    .data(video.snippet.thumbnails.high.url ?: video.snippet.thumbnails.medium.url)
                     .crossfade(true)
                     .build(),
-                contentDescription = "Video thumbnail",
+                contentDescription = "Video thumbnail for ${video.snippet.title}",
                 modifier = Modifier
-                    .size(120.dp, 90.dp)
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
                     .clip(MaterialTheme.shapes.medium),
                 contentScale = ContentScale.Crop
             )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 Text(
                     text = video.snippet.title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.headlineSmall,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = video.snippet.channelTitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Filled.PlayCircleOutline,
@@ -266,7 +243,7 @@ fun VideoListItem(video: VideoItem, onVideoClick: (VideoItem) -> Unit) {
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "${formatViewCount(video.statistics.viewCount.toLongOrNull() ?: 0)} views",
-                        style = MaterialTheme.typography.bodySmall
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }
