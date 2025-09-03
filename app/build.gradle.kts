@@ -1,7 +1,16 @@
+import java.util.Properties // Added for local.properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+}
+
+// Load local.properties
+val properties = Properties()
+val localPropertiesFile = project.rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    properties.load(localPropertiesFile.inputStream())
 }
 
 android {
@@ -16,6 +25,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Read API key from local.properties and add to BuildConfig
+        val youtubeApiKeyFromProperties = properties.getProperty("YOUTUBE_API_KEY") ?: ""
+        // Escape backslashes and double quotes in the key for safe embedding in Java string literal
+        val escapedYoutubeApiKey = youtubeApiKeyFromProperties
+            .replace("\\", "\\\\") // Replace \ with \\
+            .replace("\"", "\\\"") // Replace " with \"
+        buildConfigField("String", "YOUTUBE_API_KEY", "\"$escapedYoutubeApiKey\"")
     }
 
     buildTypes {
@@ -31,12 +47,15 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    // kotlinOptions block removed
     buildFeatures {
         compose = true
+        buildConfig = true // Ensure buildConfig is enabled
     }
-    composeOptions { // Added this block
+    composeOptions {
         kotlinCompilerExtensionVersion = libs.versions.androidxComposeCompiler.get()
+    }
+    kotlinOptions { 
+        jvmTarget = "11"
     }
 }
 
@@ -45,18 +64,28 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
+    implementation(platform(libs.androidx.compose.bom)) 
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.material3)
+    
+    // Material 3 and Adaptive Dependencies
+    implementation("androidx.compose.material3:material3") 
+    implementation("androidx.compose.material3:material3-window-size-class")
+    implementation("androidx.compose.material3:material3-adaptive-navigation-suite:1.5.0-alpha03")
+
+    implementation(libs.androidx.navigation.compose) // For Jetpack Compose Navigation
+
+
     implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.material.icons.extended)
-    implementation(libs.androidx.navigation.compose)
     implementation(libs.retrofit)
     implementation(libs.converter.gson)
     implementation(libs.coil.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.work.runtime.ktx) // Added WorkManager
+    implementation("com.google.android.gms:play-services-auth:21.4.0") // Added Google Play Services Auth
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -66,8 +95,3 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 }
 
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
-    }
-}

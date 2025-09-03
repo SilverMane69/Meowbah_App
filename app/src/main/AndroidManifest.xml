@@ -17,7 +17,8 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.Meowbah">
+            android:theme="@style/Theme.Meowbah"
+            android:configChanges="uiMode|screenSize|orientation|keyboardHidden"> <!-- ADDED/UPDATED -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

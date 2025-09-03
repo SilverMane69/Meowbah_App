@@ -8,20 +8,24 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color // Added import
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.kawaii.meowbah.R // Make sure you have R.drawable.ic_placeholder
+import com.kawaii.meowbah.R
 import com.kawaii.meowbah.ui.screens.videos.PlaceholderVideoDetailItem
 import java.util.regex.Pattern
 
@@ -32,30 +36,34 @@ fun VideoDetailScreen(
     videoId: String,
     viewModel: VideoDetailViewModel = viewModel()
 ) {
-    // Provide initial values for collectAsState
     val videoDetail by viewModel.videoDetail.collectAsState(initial = null)
-    val isLoading by viewModel.isLoading.collectAsState(initial = true) // Assuming it starts loading
+    val isLoading by viewModel.isLoading.collectAsState(initial = true)
     val error by viewModel.error.collectAsState(initial = null)
-    val context = LocalContext.current
+    val context = LocalContext.current // Get context for share intent
 
     LaunchedEffect(videoId) {
         viewModel.fetchVideoDetails(videoId)
     }
 
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
+
     Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
+            MediumTopAppBar(
                 title = {
                     val titleText = when {
                         isLoading -> "Loading..."
                         videoDetail != null -> videoDetail?.snippet?.title ?: "Video Detail"
-                        error != null -> "Error" // Or some other appropriate title for error state
-                        else -> "Video Detail" // Default title if not loading, no error, and no data yet
+                        error != null -> "Error"
+                        else -> "Video Detail"
                     }
                     Text(
                         text = titleText,
-                        maxLines = 1,
-                        style = MaterialTheme.typography.titleLarge
+                        maxLines = if (scrollBehavior.state.collapsedFraction > 0.5) 1 else 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 },
                 navigationIcon = {
@@ -63,14 +71,30 @@ fun VideoDetailScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                actions = {
+                    IconButton(onClick = {
+                        videoDetail?.let { detail ->
+                            val shareIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, "Check out this video: http://www.youtube.com/watch?v=${detail.id}")
+                                type = "text/plain"
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Share video via"))
+                        }
+                    }) {
+                        Icon(Icons.Filled.Share, contentDescription = "Share video")
+                    }
+                },
+                colors = TopAppBarDefaults.mediumTopAppBarColors(
+                    containerColor = Color.Transparent, // Changed
+                    titleContentColor = MaterialTheme.colorScheme.onSurface, // Adjusted
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface, // Adjusted
+                    actionIconContentColor = MaterialTheme.colorScheme.onSurface, // Adjusted
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
-        // The duplicated/misplaced block that was previously here has been removed.
-        // The Scaffold's topBar lambda now correctly contains a single, complete TopAppBar.
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -78,7 +102,7 @@ fun VideoDetailScreen(
                 .padding(paddingValues)
         ) {
             when {
-                isLoading -> { // isLoading will now be true initially
+                isLoading -> {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
                 error != null -> {
@@ -92,10 +116,10 @@ fun VideoDetailScreen(
                     )
                 }
                 videoDetail != null -> {
-                    val detail = videoDetail!! // Safe to use !! here because of the null check
+                    val detail = videoDetail!!
                     VideoDetailContent(detail = detail)
                 }
-                else -> { // This case might be hit briefly if videoDetail is null initially
+                else -> {
                     Text(
                         "No video details available.",
                         modifier = Modifier
@@ -121,10 +145,9 @@ fun VideoDetailContent(detail: PlaceholderVideoDetailItem) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Thumbnail
-        Card(
+        ElevatedCard(
             shape = MaterialTheme.shapes.medium,
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
@@ -135,13 +158,12 @@ fun VideoDetailContent(detail: PlaceholderVideoDetailItem) {
                     ?: detail.snippet?.thumbnails?.default?.url,
                 contentDescription = "Video thumbnail for ${detail.snippet?.title}",
                 contentScale = ContentScale.Crop,
-                placeholder = painterResource(id = R.drawable.ic_placeholder), // Ensure this drawable exists
-                error = painterResource(id = R.drawable.ic_placeholder),      // Ensure this drawable exists
+                placeholder = painterResource(id = R.drawable.ic_placeholder),
+                error = painterResource(id = R.drawable.ic_placeholder),
                 modifier = Modifier.fillMaxSize()
             )
         }
 
-        // Title
         Text(
             text = detail.snippet?.title ?: "No Title",
             style = MaterialTheme.typography.headlineSmall,
@@ -149,7 +171,6 @@ fun VideoDetailContent(detail: PlaceholderVideoDetailItem) {
             modifier = Modifier.fillMaxWidth()
         )
 
-        // Channel and Duration (in a Row)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -169,8 +190,6 @@ fun VideoDetailContent(detail: PlaceholderVideoDetailItem) {
             }
         }
 
-
-        // Description
         Text(
             text = detail.snippet?.description ?: "No description available.",
             style = MaterialTheme.typography.bodyLarge,
@@ -178,10 +197,9 @@ fun VideoDetailContent(detail: PlaceholderVideoDetailItem) {
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(8.dp)) // Extra space before button
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Open in YouTube Button
-        Button(
+        FilledTonalButton(
             onClick = {
                 val appIntent = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:${detail.id}"))
                 val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("http://www.youtube.com/watch?v=${detail.id}"))
@@ -191,7 +209,7 @@ fun VideoDetailContent(detail: PlaceholderVideoDetailItem) {
                     context.startActivity(webIntent)
                 }
             },
-            modifier = Modifier.fillMaxWidth(0.8f) // Button takes 80% of width
+            modifier = Modifier.fillMaxWidth(0.8f)
         ) {
             Text("Open in YouTube")
         }
@@ -201,9 +219,6 @@ fun VideoDetailContent(detail: PlaceholderVideoDetailItem) {
 fun formatDuration(isoDuration: String?): String {
     if (isoDuration.isNullOrBlank()) return ""
 
-    // Regular expression to parse ISO 8601 duration
-    // Example: PT1M30S (1 minute, 30 seconds), PT2H (2 hours), PT45S (45 seconds)
-    // This regex handles hours (H), minutes (M), and seconds (S)
     val pattern = Pattern.compile("PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?")
     val matcher = pattern.matcher(isoDuration)
 
@@ -226,12 +241,11 @@ fun formatDuration(isoDuration: String?): String {
                 append(String.format("%d:", displayMinutes))
             }
             append(String.format("%02d", displaySeconds))
-        }.removeSuffix(":") // Clean up if only hours or minutes exist and seconds are zero
-            .let { if (it.startsWith("0:")) it.substring(2) else it } // Remove leading "0:" if no hours
-            .let { if (it == "00") "0:00" else it} // Handle PT0S case
+        }.removeSuffix(":")
+            .let { if (it.startsWith("0:")) it.substring(2) else it }
+            .let { if (it == "00") "0:00" else it}
             .let { if (it.isEmpty()) "0:00" else it }
     }
-    return "N/A" // Return N/A or empty if parsing fails
+    return "N/A"
 }
-
 

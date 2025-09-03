@@ -2,13 +2,17 @@ package com.kawaii.meowbah.ui.screens.videos
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.kawaii.meowbah.data.remote.YoutubeApiService // Assuming this path is correct
+import com.kawaii.meowbah.BuildConfig // Added import for BuildConfig
+import com.kawaii.meowbah.data.remote.YoutubeApiService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import android.util.Log
+import org.json.JSONObject
+import retrofit2.HttpException
+import java.io.IOException
 
 // --- Placeholder Data Classes for API Interaction ---
 
@@ -38,31 +42,18 @@ data class PlaceholderStatistics(
     val viewCount: String?
 )
 
-data class PlaceholderContentDetails( // Added for video duration
+data class PlaceholderContentDetails(
     val duration: String?
-    // Other fields like dimension, definition, caption etc. can be added if needed
 )
 
-data class PlaceholderYoutubeVideoItem( // For items from youtube.search.list
+data class PlaceholderYoutubeVideoItem(
     val id: PlaceholderId?,
     val snippet: PlaceholderSnippet?,
     val statistics: PlaceholderStatistics?
 )
 
-data class PlaceholderYoutubeVideoListResponse( // For response from youtube.search.list
+data class PlaceholderYoutubeVideoListResponse(
     val items: List<PlaceholderYoutubeVideoItem>
-)
-
-// Placeholders for Video Details (youtube.videos.list)
-data class PlaceholderVideoDetailItem(
-    val id: String?,
-    val snippet: PlaceholderSnippet?,
-    val statistics: PlaceholderStatistics?,
-    val contentDetails: PlaceholderContentDetails? // Added this field
-)
-
-data class PlaceholderVideoDetailResponse(
-    val items: List<PlaceholderVideoDetailItem>
 )
 
 // --- End of Placeholder Data Classes ---
@@ -87,18 +78,21 @@ class VideosViewModel : ViewModel() {
             .create(YoutubeApiService::class.java)
     }
 
-    private val apiKey = "AIzaSyC2OviBSUQ4TIzR76g0doH6HX2b32LI10s" // IMPORTANT: Store securely and check validity!
+    // API key is now fetched from BuildConfig
+    private val apiKey = BuildConfig.YOUTUBE_API_KEY 
     private val channelId = "UCNytjdD5-KZInxjVeWV_qQw"
 
     fun fetchVideos() {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
+            // Request description for logging - API key value is not directly logged here.
+            val requestDescription = "youtubeApiService.getChannelVideos(channelId=$channelId)"
             try {
                 val response: PlaceholderYoutubeVideoListResponse = youtubeApiService.getChannelVideos(
                     part = "snippet,id",
                     channelId = channelId,
-                    apiKey = apiKey,
+                    apiKey = apiKey, // Uses the apiKey from BuildConfig
                     maxResults = 20,
                     type = "video",
                     order = "date"
@@ -129,10 +123,33 @@ class VideosViewModel : ViewModel() {
                         )
                     )
                 }
+                Log.d("VideosViewModel", "Successfully fetched videos for $requestDescription")
 
+            } catch (e: HttpException) {
+                val errorBody = e.response()?.errorBody()?.string() ?: "No error body"
+                var detailedMessage = "HTTP ${e.code()}: ${e.message()}"
+                try {
+                    val errorJson = JSONObject(errorBody)
+                    val specificReason = errorJson.optJSONObject("error")
+                                               ?.optJSONArray("errors")
+                                               ?.optJSONObject(0)
+                                               ?.optString("reason", "Unknown reason")
+                    val apiMessage = errorJson.optJSONObject("error")
+                                              ?.optString("message", e.message()) 
+                    detailedMessage = "API Error (HTTP ${e.code()}) - Reason: $specificReason, Message: $apiMessage"
+                } catch (jsonE: Exception) {
+                    Log.e("VideosViewModel", "Failed to parse error body as JSON: $errorBody", jsonE)
+                }
+                Log.e("VideosViewModel", "API Error for $requestDescription. Details: $detailedMessage\nRaw Error Body: $errorBody", e)
+                _error.value = "API Error: $detailedMessage. Please check logs for full error body."
+                _videos.value = emptyList()
+            } catch (e: IOException) {
+                Log.e("VideosViewModel", "Network Error for $requestDescription: ${e.message}", e)
+                _error.value = "Network error. Please check your connection."
+                _videos.value = emptyList()
             } catch (e: Exception) {
-                Log.e("VideosViewModel", "Error fetching videos", e)
-                _error.value = "Failed to load videos: ${e.localizedMessage ?: e.message}"
+                Log.e("VideosViewModel", "Unexpected error for $requestDescription: ${e.message}", e)
+                _error.value = "Failed to load videos due to an unexpected error."
                 _videos.value = emptyList()
             } finally {
                 _isLoading.value = false

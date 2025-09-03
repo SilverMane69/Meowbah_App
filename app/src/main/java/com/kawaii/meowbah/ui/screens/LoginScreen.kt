@@ -3,23 +3,28 @@ package com.kawaii.meowbah.ui.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+// import androidx.compose.foundation.layout.Row // No longer needed for Google Button if using official
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+// import androidx.compose.foundation.layout.width // No longer needed for Google Button if using official
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+// import androidx.compose.material3.Icon // No longer needed for Google Button if using official
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,11 +33,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+// import androidx.compose.ui.text.font.FontWeight // No longer needed for Google Button placeholder
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.kawaii.meowbah.R // Assuming your R file is here
+import androidx.compose.ui.viewinterop.AndroidView // Added for SignInButton
+import com.google.android.gms.common.SignInButton // Added for SignInButton
+import com.kawaii.meowbah.R
 import com.kawaii.meowbah.ui.theme.MeowbahTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,14 +50,20 @@ fun LoginScreen(
     onLoginClicked: (String, String) -> Unit = { _, _ -> },
     onSignUpClicked: () -> Unit = {},
     onForgotPasswordClicked: () -> Unit = {},
-    onGuestLoginClicked: () -> Unit = {} // Added guest login callback
+    onGuestLoginClicked: () -> Unit = {},
+    onGoogleSignInClicked: () -> Unit = {} 
 ) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Login") })
+            CenterAlignedTopAppBar(
+                title = { Text("Login") },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            )
         },
         modifier = modifier.fillMaxSize()
     ) { paddingValues ->
@@ -61,25 +75,24 @@ fun LoginScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Card(
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                modifier = Modifier.fillMaxWidth(0.85f) // Slightly wider card
+            ElevatedCard(
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp),
+                modifier = Modifier.fillMaxWidth(0.85f)
             ) {
                 Column(
                     modifier = Modifier
                         .padding(all = 24.dp)
                         .fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp) // Adjusted spacing
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Placeholder for App Logo - Replace with your actual logo
                     Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_foreground), // Replace with your logo
+                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
                         contentDescription = "App Logo",
                         modifier = Modifier.size(100.dp)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Welcome Back!", style = MaterialTheme.typography.headlineMedium) // Slightly larger text
+                    Text("Welcome Back!", style = MaterialTheme.typography.headlineMedium)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     OutlinedTextField(
@@ -109,12 +122,28 @@ fun LoginScreen(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp)) // Reduced spacer
-            TextButton(onClick = onSignUpClicked) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Sign in with Google Button - Replaced with official GoogleSignInButton
+            AndroidView(
+                factory = { context ->
+                    SignInButton(context).apply {
+                        setSize(SignInButton.SIZE_WIDE)
+                        setColorScheme(SignInButton.COLOR_AUTO) // Or COLOR_DARK / COLOR_LIGHT
+                        setOnClickListener {
+                            onGoogleSignInClicked()
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(0.85f) // Apply similar width constraint
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedButton(onClick = onSignUpClicked, modifier = Modifier.fillMaxWidth(0.85f)) {
                 Text("Don't have an account? Sign Up")
             }
-            Spacer(modifier = Modifier.height(8.dp)) // Spacer before guest login
-            TextButton(onClick = onGuestLoginClicked) { // Added guest login button
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(onClick = onGuestLoginClicked, modifier = Modifier.fillMaxWidth(0.85f)) { 
                 Text("Login as Guest")
             }
         }
@@ -125,6 +154,8 @@ fun LoginScreen(
 @Composable
 fun LoginScreenPreview() {
     MeowbahTheme {
-        LoginScreen()
+        LoginScreen(
+            onGoogleSignInClicked = {} 
+        )
     }
 }

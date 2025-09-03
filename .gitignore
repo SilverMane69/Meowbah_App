@@ -1,15 +1,71 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+# Built application files
+*.apk
+*.aab
+*.ap_
+*.aار
+*.dex
+
+# Files for the Dalvik VM
+dalvik-cache/
+
+# Generated code
+*/build/
+
+# Local configuration file (sdk path, etc)
 local.properties
+
+# Log Files
+*.log
+
+# Android Studio Navigation editor files
+.navigation/
+
+# Android Studio captures folder
+captures/
+
+# IntelliJ
+*.iml
+.idea/
+
+# Gradle
+.gradle/
+build/
+
+# Keystore files
+*.jks
+*.keystore
+
+# Google Services (JSON file typically downloaded from Firebase console)
+*/google-services.json
+
+# Kotlin KSP
+*/generated/
+
+# Secrets (if you have a custom secrets gradle plugin, etc.)
+secrets.properties
+
+# Realm mobile database files
+*.realm.lock
+*.realm.management
+*.realm.note
+*.realm
+
+# Android Profiler captures
+*.hprof
+
+# CMake files (if you're using NDK)
+.cxx/
+cmake-build-*/
+
+# macOS specific
+.DS_Store
+
+# Flutter specific (if ever used in a sub-module or such)
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.dart_tool/
+build/
+
+# Crashlytics generated files
+com_crashlytics_export_strings.xml
