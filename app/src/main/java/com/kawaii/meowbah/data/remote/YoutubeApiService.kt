@@ -1,8 +1,9 @@
 package com.kawaii.meowbah.data.remote
 
 import com.kawaii.meowbah.data.YoutubeVideoDetailResponse
-import com.kawaii.meowbah.ui.screens.videos.PlaceholderYoutubeVideoListResponse
-import retrofit2.Call // ADDED for synchronous calls
+// Removed: import com.kawaii.meowbah.ui.screens.videos.PlaceholderYoutubeVideoListResponse
+import com.kawaii.meowbah.data.remote.YoutubeVideoListResponse // Added: Import for the new DTO
+import retrofit2.Call
 import retrofit2.Response 
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -18,9 +19,8 @@ interface YoutubeApiService {
         @Query("maxResults") maxResults: Int,
         @Query("type") type: String,
         @Query("order") order: String
-    ): Response<PlaceholderYoutubeVideoListResponse> 
+    ): Response<YoutubeVideoListResponse> // Changed to new DTO
 
-    // ADDED: Synchronous version for use in non-coroutine contexts like AppWidget
     @GET("search")
     fun getChannelVideosSync(
         @Query("part") part: String,
@@ -29,7 +29,7 @@ interface YoutubeApiService {
         @Query("maxResults") maxResults: Int,
         @Query("type") type: String,
         @Query("order") order: String
-    ): Call<PlaceholderYoutubeVideoListResponse> // Returns Call<T>
+    ): Call<YoutubeVideoListResponse> // Changed to new DTO
 
     @GET("videos")
     suspend fun getVideoDetails(

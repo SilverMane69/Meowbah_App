@@ -77,6 +77,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation("androidx.appcompat:appcompat:1.7.1") // Added AppCompat
+    implementation("com.google.android.material:material:1.13.0") // Added Material Components for Android
     
     // Material 3 and Adaptive Dependencies
     implementation("androidx.compose.material3:material3") 

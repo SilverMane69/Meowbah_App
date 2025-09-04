@@ -19,13 +19,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-// import androidx.lifecycle.viewmodel.compose.viewModel // No longer creating ViewModel here
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.kawaii.meowbah.R
-import com.kawaii.meowbah.ui.screens.videos.VideoItem 
+import com.kawaii.meowbah.data.CachedVideoInfo // Changed from VideoItem
 import com.kawaii.meowbah.ui.screens.videos.VideosViewModel 
-import com.kawaii.meowbah.ui.screens.videos.formatViewCount
+// import com.kawaii.meowbah.ui.screens.videos.formatViewCount // formatViewCount might be removed if stats are gone
+import java.io.File // For loading image from path
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -36,22 +37,21 @@ private const val TAG = "VideoDetailScreen"
 @Composable
 fun VideoDetailScreen(
     navController: NavController,
-    videoId: String, // Expecting a simple String ID here
-    videosViewModel: VideosViewModel // Accept ViewModel as a parameter
+    videoId: String, 
+    videosViewModel: VideosViewModel
 ) {
     Log.d(TAG, "Composing for videoId: '$videoId'. ViewModel instance: $videosViewModel")
 
-    val videosList by videosViewModel.videos.collectAsState()
+    val videosList by videosViewModel.videos.collectAsState() // This is List<CachedVideoInfo>
     val isLoadingFromVM by videosViewModel.isLoading.collectAsState() 
     val errorFromVM by videosViewModel.error.collectAsState()
 
     Log.d(TAG, "videosList size: ${videosList.size}. First item ID (if any): ${videosList.firstOrNull()?.id}. IsLoading: $isLoadingFromVM, Error: $errorFromVM")
 
-    val videoItem = remember(videosList, videoId) {
-        // Ensure videoId is treated as a simple string for comparison
-        val idToFind = videoId.trim().removeSurrounding("\"") // Basic sanitization
+    val videoItem: CachedVideoInfo? = remember(videosList, videoId) {
+        val idToFind = videoId.trim().removeSurrounding("\"") 
         val foundItem = videosList.find { it.id == idToFind }
-        Log.d(TAG, "Finding videoId (sanitized): '$idToFind'. Found item: ${foundItem != null}. Item Desc: ${foundItem?.snippet?.localized?.description?.take(30)}..., Item PubAt: ${foundItem?.snippet?.publishedAt}")
+        Log.d(TAG, "Finding videoId (sanitized): '$idToFind'. Found item: ${foundItem != null}. Item Title: ${foundItem?.title?.take(30)}..., Item PubAt: ${foundItem?.publishedAt}")
         foundItem
     }
 
@@ -100,7 +100,7 @@ fun VideoDetailScreen(
 
 @Composable
 fun VideoDetailContent(
-    videoItem: VideoItem,
+    videoItem: CachedVideoInfo, // Changed from VideoItem
     navController: NavController
 ) {
     val context = LocalContext.current
@@ -141,83 +141,42 @@ fun VideoDetailContent(
                 .aspectRatio(16f / 9f)
         ) {
             AsyncImage(
-                model = videoItem.snippet.thumbnails.high.url
-                    ?: videoItem.snippet.thumbnails.medium.url
-                    ?: videoItem.snippet.thumbnails.default.url,
-                contentDescription = "Video thumbnail for ${videoItem.snippet.title}",
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(videoItem.cachedThumbnailPath?.let { File(it) } ?: R.drawable.ic_placeholder)
+                    .crossfade(true)
+                    .error(R.drawable.ic_placeholder)
+                    .placeholder(R.drawable.ic_placeholder)
+                    .build(),
+                contentDescription = "Video thumbnail for ${videoItem.title}",
                 contentScale = ContentScale.Crop,
-                placeholder = painterResource(id = R.drawable.ic_placeholder),
-                error = painterResource(id = R.drawable.ic_placeholder),
                 modifier = Modifier.fillMaxSize()
             )
         }
 
         Text(
-            text = videoItem.snippet.title,
+            text = videoItem.title,
             style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
         )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = videoItem.snippet.channelTitle ?: "Unknown Channel",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
         
         Text(
-            text = formatPublishedAtDate(videoItem.snippet.publishedAt),
+            text = formatPublishedAtDate(videoItem.publishedAt),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.fillMaxWidth()
         )
 
-        videoItem.statistics?.let { stats ->
-             if (stats.viewCount != null || stats.likeCount != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    stats.viewCount?.toLongOrNull()?.let {
-                        Text(
-                            text = formatViewCount(it) + " views",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+        // Statistics (view count, like count) have been removed as they are not in CachedVideoInfo
+        // If these are needed, a separate mechanism to fetch full video details would be required.
 
-                    stats.likeCount?.let { likeCount ->
-                        if (stats.viewCount != null && likeCount != "...") {
-                             Text(
-                                text = "•",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (likeCount != "...") { 
-                            Text(
-                                text = "$likeCount likes",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
+        videoItem.description?.let {
+             Text(
+                text = it,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
         }
-
-        Text(
-            text = videoItem.snippet.localized.description,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-        )
-
+       
         Spacer(modifier = Modifier.height(16.dp))
 
         FilledTonalButton(
@@ -247,7 +206,7 @@ fun formatPublishedAtDate(isoDate: String?): String {
         val formatter = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
         odt.format(formatter)
     } catch (e: Exception) {
-        Log.w(TAG, "Error formatting date: $isoDate", e) // Changed to Log.w for visibility
+        Log.w(TAG, "Error formatting date: $isoDate", e) 
         "Date unavailable"
     }
 }
