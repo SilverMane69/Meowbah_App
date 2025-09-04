@@ -61,6 +61,7 @@ import androidx.work.WorkManager
 import com.kawaii.meowbah.data.AuthRepository
 import com.kawaii.meowbah.data.TokenStorageService
 import com.kawaii.meowbah.data.remote.AuthApiService
+import com.kawaii.meowbah.ui.dialogs.WelcomeDialog
 import com.kawaii.meowbah.ui.screens.SettingsScreen
 import com.kawaii.meowbah.ui.screens.VideosScreen
 import com.kawaii.meowbah.ui.screens.videodetail.VideoDetailScreen
@@ -90,11 +91,13 @@ val bottomNavItems = listOf(
 
 class MainActivity : ComponentActivity() {
 
-    private val PREFS_NAME = "MeowbahAppPreferences"
-    private val KEY_SELECTED_THEME = "selectedTheme"
-    private val KEY_LOGIN_MUSIC_ENABLED = "loginMusicEnabled"
-    // private val KEY_PENDING_VIDEO_ID = "pendingVideoId" // Widget related key removed
-    private val TAG = "MainActivity"
+    companion object {
+        private const val PREFS_NAME = "MeowbahAppPreferences"
+        private const val KEY_SELECTED_THEME = "selectedTheme"
+        private const val KEY_LOGIN_MUSIC_ENABLED = "loginMusicEnabled"
+        private const val KEY_WELCOME_DIALOG_SHOWN = "welcomeDialogShown"
+        private const val TAG = "MainActivity"
+    }
     
     private lateinit var onLoginSuccessState: () -> Unit 
 
@@ -129,26 +132,24 @@ class MainActivity : ComponentActivity() {
         return sharedPrefs.getBoolean(KEY_LOGIN_MUSIC_ENABLED, true)
     }
 
-    // Widget related intent handling removed
-    // private fun handleWidgetIntent(intent: Intent?) { ... }
-
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // handleWidgetIntent(intent) // Widget related call removed
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // handleWidgetIntent(intent) // Widget related call removed
-
         tokenStorageService = TokenStorageService(applicationContext)
         authApiService = AuthApiService.create()
         authRepository = AuthRepository(authApiService) 
 
         scheduleYoutubeSync()
+        scheduleRssSyncWorker()
+
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val welcomeDialogAlreadyShown = sharedPrefs.getBoolean(KEY_WELCOME_DIALOG_SHOWN, false)
 
         setContent {
             var currentAppTheme by remember { mutableStateOf(loadThemePreference()) }
@@ -172,6 +173,15 @@ class MainActivity : ComponentActivity() {
                 isLoginMusicEnabled = enabled
             } }
 
+            var showWelcomeDialog by rememberSaveable { mutableStateOf(!welcomeDialogAlreadyShown) }
+            val onWelcomeDialogDismissed: () -> Unit = {
+                showWelcomeDialog = false
+                with(sharedPrefs.edit()) {
+                    putBoolean(KEY_WELCOME_DIALOG_SHOWN, true)
+                    apply()
+                }
+            }
+
             LaunchedEffect(Unit) {
                 if (tokenStorageService.isAccessTokenValid()) {
                     Log.d(TAG, "Valid access token found. Setting isLoggedIn to true.")
@@ -194,11 +204,9 @@ class MainActivity : ComponentActivity() {
                         onSelectedTabRouteChange = onSelectedTabRouteChange,
                         isLoginMusicEnabled = isLoginMusicEnabled,
                         onLoginMusicEnabledChange = onLoginMusicEnabledChange,
-                        getPendingVideoId = { 
-                            // Original logic for widget pending video ID removed.
-                            // Return null as there's no widget setting this value anymore.
-                            null
-                        }
+                        getPendingVideoId = { null },
+                        showWelcomeDialog = showWelcomeDialog, // Pass state
+                        onWelcomeDialogDismissed = onWelcomeDialogDismissed // Pass callback
                     )
                 }
             }
@@ -258,8 +266,11 @@ fun AppNavigation(
     onSelectedTabRouteChange: (String) -> Unit,
     isLoginMusicEnabled: Boolean,
     onLoginMusicEnabledChange: (Boolean) -> Unit,
-    getPendingVideoId: () -> String?
+    getPendingVideoId: () -> String?,
+    showWelcomeDialog: Boolean, // New parameter
+    onWelcomeDialogDismissed: () -> Unit // New parameter
 ) {
+    val TAG = "AppNavigation" // Defined TAG for local scope
     val navController = rememberNavController()
 
     LaunchedEffect(isLoggedIn, navController) {
@@ -276,9 +287,7 @@ fun AppNavigation(
         if (isLoggedIn) { 
             val pendingVideoId = getPendingVideoId()
             if (pendingVideoId != null) {
-                // This log might still appear if getPendingVideoId is called, 
-                // but it will always be null now unless re-purposed.
-                Log.d("AppNavigation", "Pending video ID found: $pendingVideoId. Navigation handled by MainScreen.")
+                Log.d(TAG, "Pending video ID found: $pendingVideoId. Navigation handled by MainScreen.")
             }
         }
     }
@@ -294,8 +303,14 @@ fun AppNavigation(
                 isLoginMusicEnabled = isLoginMusicEnabled,
                 onLoginMusicEnabledChange = onLoginMusicEnabledChange,
                 getPendingVideoId = getPendingVideoId
+                // Welcome dialog will be shown from AppNavigation or MainScreen scope if needed
             )
         }
+    }
+
+    // Show Welcome Dialog if needed
+    if (showWelcomeDialog) {
+        WelcomeDialog(onDismissRequest = onWelcomeDialogDismissed)
     }
 }
 
@@ -310,6 +325,7 @@ fun MainScreen(
     onLoginMusicEnabledChange: (Boolean) -> Unit,
     getPendingVideoId: () -> String?
 ) {
+    val TAG = "MainScreen" // Defined TAG for local scope
     val innerNavController = rememberNavController()
     val videosViewModel: VideosViewModel = viewModel()
 
@@ -327,7 +343,7 @@ fun MainScreen(
     LaunchedEffect(Unit, innerNavController) {
         val videoId = getPendingVideoId()
         if (videoId != null) {
-            Log.d("MainScreen", "Pending video ID $videoId found. Navigating on innerNavController.")
+            Log.d(TAG, "Pending video ID $videoId found. Navigating on innerNavController.")
             if (innerNavController.currentDestination?.route?.startsWith("video_detail/") == false &&
                 selectedTabRoute != BottomNavItem.Videos.route) {
                  innerNavController.navigate(BottomNavItem.Videos.route) {
@@ -345,7 +361,7 @@ fun MainScreen(
         if (isLoginMusicEnabled) {
             var playerInstance = mediaPlayer
             if (playerInstance == null) {
-                Log.d("MainScreenMusic", "MediaPlayer is null, creating.")
+                Log.d(TAG, "MediaPlayer is null, creating.")
                 playerInstance = MediaPlayer.create(context, R.raw.madoka_music)
                 playerInstance?.isLooping = true
                 mediaPlayer = playerInstance
@@ -353,15 +369,15 @@ fun MainScreen(
             playerInstance?.let { p ->
                 if (!p.isPlaying) {
                     try {
-                        Log.d("MainScreenMusic", "Attempting to start MediaPlayer.")
+                        Log.d(TAG, "Attempting to start MediaPlayer.")
                         p.start()
                     } catch (e: IllegalStateException) {
-                        Log.e("MainScreenMusic", "Error starting MediaPlayer: ${e.message}. Releasing and re-creating.")
-                        try { p.release() } catch (re: Exception) { Log.e("MainScreenMusic", "Error releasing faulty player: ${re.message}") }
+                        Log.e(TAG, "Error starting MediaPlayer: ${e.message}. Releasing and re-creating.")
+                        try { p.release() } catch (re: Exception) { Log.e(TAG, "Error releasing faulty player: ${re.message}") }
                         mediaPlayer = MediaPlayer.create(context, R.raw.madoka_music)?.apply {
                             isLooping = true
-                            try { start(); Log.d("MainScreenMusic", "Successfully started after re-creation.") }
-                            catch (e2: IllegalStateException) { Log.e("MainScreenMusic", "Error starting MediaPlayer on second attempt: ${e2.message}") }
+                            try { start(); Log.d(TAG, "Successfully started after re-creation.") }
+                            catch (e2: IllegalStateException) { Log.e(TAG, "Error starting MediaPlayer on second attempt: ${e2.message}") }
                         }
                     }
                 }
@@ -369,8 +385,8 @@ fun MainScreen(
         } else {
             mediaPlayer?.let {
                 if (it.isPlaying) {
-                    Log.d("MainScreenMusic", "Pausing MediaPlayer because isLoginMusicEnabled is false.")
-                    try { it.pause() } catch (e: IllegalStateException) { Log.e("MainScreenMusic", "Error pausing MediaPlayer: ${e.message}") }
+                    Log.d(TAG, "Pausing MediaPlayer because isLoginMusicEnabled is false.")
+                    try { it.pause() } catch (e: IllegalStateException) { Log.e(TAG, "Error pausing MediaPlayer: ${e.message}") }
                 }
             }
         }
@@ -381,16 +397,16 @@ fun MainScreen(
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> {
                     if (isLoginMusicEnabled && mediaPlayer?.isPlaying == true) {
-                        Log.d("MainScreenMusic", "Pausing MediaPlayer on ON_PAUSE")
-                        try { mediaPlayer?.pause() } catch (e: IllegalStateException) { Log.e("MainScreenMusic", "Error pausing MediaPlayer in ON_PAUSE: ${e.message}") }
+                        Log.d(TAG, "Pausing MediaPlayer on ON_PAUSE")
+                        try { mediaPlayer?.pause() } catch (e: IllegalStateException) { Log.e(TAG, "Error pausing MediaPlayer in ON_PAUSE: ${e.message}") }
                     }
                 }
                 Lifecycle.Event.ON_RESUME -> {
                     if (isLoginMusicEnabled && mediaPlayer != null && mediaPlayer?.isPlaying == false) {
                         try {
-                            Log.d("MainScreenMusic", "Starting MediaPlayer on ON_RESUME")
+                            Log.d(TAG, "Starting MediaPlayer on ON_RESUME")
                             mediaPlayer?.start() 
-                        } catch (e: IllegalStateException) { Log.e("MainScreenMusic", "Error starting MediaPlayer on ON_RESUME: ${e.message}") }
+                        } catch (e: IllegalStateException) { Log.e(TAG, "Error starting MediaPlayer on ON_RESUME: ${e.message}") }
                     }
                 }
                 else -> Unit
@@ -398,11 +414,11 @@ fun MainScreen(
         }
         lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
         onDispose {
-            Log.d("MainScreenMusic", "Disposing MediaPlayer in MainScreen")
+            Log.d(TAG, "Disposing MediaPlayer in MainScreen")
             lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
             mediaPlayer?.let {
                 try { if (it.isPlaying) { it.stop() }; it.release() }
-                catch (e: Exception) { Log.e("MainScreenMusic", "Error stopping/releasing MediaPlayer in onDispose: ${e.message}") }
+                catch (e: Exception) { Log.e(TAG, "Error stopping/releasing MediaPlayer in onDispose: ${e.message}") }
             }
             mediaPlayer = null
         }
@@ -418,8 +434,6 @@ fun MainScreen(
                 NavigationBar(
                     // Modifiers for padding and clip removed to make it non-floating
                 ) {
-                    // val navBackStackEntry by innerNavController.currentBackStackEntryAsState() // Already defined above
-                    // val currentInnerDestination = navBackStackEntry?.destination // Already defined above
                     bottomNavItems.forEach { screen ->
                         NavigationBarItem(
                             selected = currentInnerDestination?.hierarchy?.any { it.route == screen.route } == true,
@@ -473,7 +487,7 @@ fun MainScreen(
                         videosViewModel = videosViewModel
                     )
                 } else {
-                    Log.e("AppNavigation", "Error: videoId was null for VideoDetailScreen.")
+                    Log.e(TAG, "Error: videoId was null for VideoDetailScreen.")
                     Text("Error loading video details. Video ID missing.") 
                 }
             }

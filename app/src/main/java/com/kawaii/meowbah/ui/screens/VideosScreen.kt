@@ -3,6 +3,7 @@ package com.kawaii.meowbah.ui.screens
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -28,6 +29,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DockedSearchBar
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -54,10 +56,10 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.kawaii.meowbah.R 
+import com.kawaii.meowbah.R
 import com.kawaii.meowbah.data.CachedVideoInfo
 import com.kawaii.meowbah.ui.screens.videos.VideosViewModel
-import java.io.File 
+import java.io.File
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -78,6 +80,8 @@ fun VideosScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
+    // Define the YouTube channel URL - Assuming the channel ID is UC6GUr63276jX75XNn7M9uYw
+    val youtubeChannelUrl = "https://www.youtube.com/@Meowbahx"
 
     val speechRecognizerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -87,7 +91,7 @@ fun VideosScreen(
             val results: ArrayList<String>? = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
             if (!results.isNullOrEmpty()) {
                 searchQuery = results[0]
-                searchActive = true 
+                searchActive = true
             }
         }
     }
@@ -107,10 +111,10 @@ fun VideosScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 query = searchQuery,
                 onQueryChange = { searchQuery = it },
-                onSearch = { /* searchActive = false */ }, 
+                onSearch = { /* searchActive = false */ },
                 active = searchActive,
                 onActiveChange = { searchActive = it },
-                placeholder = { Text("Search Kawaii Videos") }, // Updated placeholder
+                placeholder = { Text("Search Kawaii Videos") },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
                 trailingIcon = {
                     IconButton(onClick = {
@@ -154,7 +158,7 @@ fun VideosScreen(
                                     )
                                 },
                                 modifier = Modifier.clickable {
-                                    searchActive = false 
+                                    searchActive = false
                                     navController.navigate("video_detail/${video.id}")
                                 }
                             )
@@ -191,6 +195,21 @@ fun VideosScreen(
                             navController.navigate("video_detail/${clickedVideo.id}")
                         })
                     }
+                    if (videosState.isNotEmpty()) { // Show button only if there are videos
+                        item {
+                            FilledTonalButton(
+                                onClick = {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(youtubeChannelUrl))
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp) // Add some padding around the button
+                            ) {
+                                Text("Show More on YouTube")
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -204,9 +223,9 @@ fun VideoListItem(video: CachedVideoInfo, onVideoClick: (CachedVideoInfo) -> Uni
             OffsetDateTime.parse(pubAtNonNull)
                 .format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(Locale.getDefault()))
         } catch (e: Exception) {
-            pubAtNonNull 
+            pubAtNonNull
         }
-    } ?: "Date unavailable" 
+    } ?: "Date unavailable"
 
     ElevatedCard(
         modifier = Modifier
@@ -215,7 +234,7 @@ fun VideoListItem(video: CachedVideoInfo, onVideoClick: (CachedVideoInfo) -> Uni
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(),
-                onClick = { onVideoClick(video) } 
+                onClick = { onVideoClick(video) }
             ),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
     ) {
@@ -224,8 +243,8 @@ fun VideoListItem(video: CachedVideoInfo, onVideoClick: (CachedVideoInfo) -> Uni
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(video.cachedThumbnailPath?.let { File(it) } ?: R.drawable.ic_placeholder)
                     .crossfade(true)
-                    .error(R.drawable.ic_placeholder) 
-                    .placeholder(R.drawable.ic_placeholder) 
+                    .error(R.drawable.ic_placeholder)
+                    .placeholder(R.drawable.ic_placeholder)
                     .build(),
                 contentDescription = "Video thumbnail for ${video.title}",
                 modifier = Modifier
@@ -241,14 +260,14 @@ fun VideoListItem(video: CachedVideoInfo, onVideoClick: (CachedVideoInfo) -> Uni
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = video.title, 
+                    text = video.title,
                     style = MaterialTheme.typography.titleLarge,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 // Description Text composable removed from here
                 Text(
-                    text = publishedDateFormatted, 
+                    text = publishedDateFormatted,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
