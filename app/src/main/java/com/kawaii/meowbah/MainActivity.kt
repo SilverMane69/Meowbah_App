@@ -1,58 +1,52 @@
 package com.kawaii.meowbah
 
-import android.Manifest
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.media.MediaPlayer
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Row
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+// import androidx.compose.foundation.shape.RoundedCornerShape // No longer needed for Nav Bar
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Settings
+// import androidx.compose.material.icons.filled.Favorite // Not used
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.FavoriteBorder
+// import androidx.compose.material.icons.outlined.FavoriteBorder // Not used
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
-import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+// import androidx.compose.ui.draw.clip // No longer needed for Nav Bar
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -64,30 +58,21 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.Scope
 import com.kawaii.meowbah.data.AuthRepository
-import com.kawaii.meowbah.data.TokenStorageService // Added import
+import com.kawaii.meowbah.data.TokenStorageService
 import com.kawaii.meowbah.data.remote.AuthApiService
-import com.kawaii.meowbah.ui.activities.NotificationUtils
-import com.kawaii.meowbah.ui.screens.FanArtScreen
-import com.kawaii.meowbah.ui.screens.LoginScreen
-import com.kawaii.meowbah.ui.screens.ProfileScreen
+import com.kawaii.meowbah.ui.dialogs.WelcomeDialog
+import com.kawaii.meowbah.ui.screens.SettingsScreen
 import com.kawaii.meowbah.ui.screens.VideosScreen
 import com.kawaii.meowbah.ui.screens.videodetail.VideoDetailScreen
+import com.kawaii.meowbah.ui.screens.videos.VideosViewModel
 import com.kawaii.meowbah.ui.theme.AvailableTheme
 import com.kawaii.meowbah.ui.theme.MeowbahTheme
 import com.kawaii.meowbah.ui.theme.allThemes
-import com.kawaii.meowbah.widgets.VideoWidgetViewsFactory
+// import com.kawaii.meowbah.widgets.VideoWidgetViewsFactory // Widget import removed
+import com.kawaii.meowbah.workers.RssSyncWorker
 import com.kawaii.meowbah.workers.YoutubeSyncWorker
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.delay
 
 sealed class BottomNavItem(
     val route: String,
@@ -96,197 +81,29 @@ sealed class BottomNavItem(
     val outlinedIcon: ImageVector
 ) {
     object Videos : BottomNavItem("videos_tab", "Videos", Icons.Filled.Videocam, Icons.Outlined.Videocam)
-    object FanArt : BottomNavItem("fan_art_tab", "Fan Art", Icons.Filled.Favorite, Icons.Outlined.FavoriteBorder)
-    object Profile : BottomNavItem("profile_tab", "Profile", Icons.Filled.AccountCircle, Icons.Outlined.AccountCircle)
+    object Settings : BottomNavItem("settings_tab", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 
 val bottomNavItems = listOf(
     BottomNavItem.Videos,
-    BottomNavItem.FanArt,
-    BottomNavItem.Profile
+    BottomNavItem.Settings
 )
 
 class MainActivity : ComponentActivity() {
 
-    private val PREFS_NAME = "MeowbahAppPreferences"
-    private val KEY_SELECTED_THEME = "selectedTheme"
-    private val KEY_PROFILE_IMAGE_URI = "profileImageUri"
-    private val KEY_IS_LOGGED_IN = "isLoggedIn"
-    private val KEY_LOGIN_TYPE = "loginType"
-    private val KEY_LOGIN_MUSIC_ENABLED = "loginMusicEnabled"
-    private val TAG = "MainActivity"
-
-    private lateinit var googleSignInClient: GoogleSignInClient
-    private lateinit var googleSignInLauncher: ActivityResultLauncher<Intent>
-
-    private var loginSoundPlayer: MediaPlayer? = null
-    private var wasLoginSoundPlaying: Boolean = false
-    private var isLoginMusicGloballyEnabled: Boolean = true
-
-    private val _videoIdToOpenFromWidget = MutableStateFlow<String?>(null)
+    companion object {
+        private const val PREFS_NAME = "MeowbahAppPreferences"
+        private const val KEY_SELECTED_THEME = "selectedTheme"
+        private const val KEY_LOGIN_MUSIC_ENABLED = "loginMusicEnabled"
+        private const val KEY_WELCOME_DIALOG_SHOWN = "welcomeDialogShown"
+        private const val TAG = "MainActivity"
+    }
+    
+    private lateinit var onLoginSuccessState: () -> Unit 
 
     private lateinit var authApiService: AuthApiService
-    private lateinit var authRepository: AuthRepository
+    private lateinit var authRepository: AuthRepository 
     private lateinit var tokenStorageService: TokenStorageService
-
-    companion object {
-        const val ACTION_VIEW_VIDEO = "com.kawaii.meowbah.ACTION_VIEW_VIDEO"
-        const val EXTRA_VIDEO_ID = "com.kawaii.meowbah.EXTRA_VIDEO_ID"
-    }
-
-    private var onGoogleSignInSuccessInternal: (account: GoogleSignInAccount) -> Unit = { acc ->
-        Log.d(TAG, "Default onGoogleSignInSuccessInternal for ${acc.displayName}. State setters not hooked up.")
-        saveLoginState(true, "google")
-    }
-    private var onGoogleSignInFailureInternal: (exception: Exception?) -> Unit = { e ->
-        Log.w(TAG, "Default onGoogleSignInFailureInternal. State setters not hooked up.", e)
-    }
-
-    private fun saveLoginState(loggedIn: Boolean, loginType: String? = null) {
-        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        with(sharedPrefs.edit()) {
-            putBoolean(KEY_IS_LOGGED_IN, loggedIn)
-            if (loggedIn && loginType != null) {
-                putString(KEY_LOGIN_TYPE, loginType)
-            } else {
-                remove(KEY_LOGIN_TYPE)
-            }
-            apply()
-        }
-    }
-
-    private fun loadLoginState(): Pair<Boolean, String?> {
-        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val isLoggedIn = sharedPrefs.getBoolean(KEY_IS_LOGGED_IN, false)
-        val loginType = if (isLoggedIn) sharedPrefs.getString(KEY_LOGIN_TYPE, null) else null
-        return Pair(isLoggedIn, loginType)
-    }
-
-    private fun saveLoginMusicPreference(enabled: Boolean) {
-        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        with(sharedPrefs.edit()) {
-            putBoolean(KEY_LOGIN_MUSIC_ENABLED, enabled)
-            apply()
-        }
-        isLoginMusicGloballyEnabled = enabled
-    }
-
-    private fun loadLoginMusicPreference(): Boolean {
-        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        isLoginMusicGloballyEnabled = sharedPrefs.getBoolean(KEY_LOGIN_MUSIC_ENABLED, true)
-        return isLoginMusicGloballyEnabled
-    }
-
-    fun onLoginMusicEnabledChanged(enabled: Boolean, isLoggedInState: Boolean) {
-        saveLoginMusicPreference(enabled)
-        if (!enabled) {
-            loginSoundPlayer?.let {
-                if (it.isPlaying) {
-                    Log.d(TAG, "Login music disabled by user, pausing MediaPlayer.")
-                    it.pause()
-                }
-            }
-        } else {
-            if (isLoggedInState && wasLoginSoundPlaying && loginSoundPlayer != null && loginSoundPlayer?.isPlaying == false) {
-                Log.d(TAG, "Login music enabled by user, resuming MediaPlayer.")
-                try {
-                    loginSoundPlayer?.start()
-                } catch (e: IllegalStateException) {
-                    Log.e(TAG, "Error resuming login sound on enable toggle", e)
-                    loginSoundPlayer?.release()
-                    loginSoundPlayer = null
-                    wasLoginSoundPlaying = false
-                }
-            } else if (isLoggedInState && loginSoundPlayer == null && isLoginMusicGloballyEnabled) {
-                 Log.d(TAG, "Login music enabled, player was null, calling playLoginSound()");
-                 playLoginSound()
-            }
-        }
-    }
-
-    fun playLoginSound() {
-        if (!isLoginMusicGloballyEnabled) {
-            Log.d(TAG, "Login music is globally disabled, not playing sound.")
-            return
-        }
-        try {
-            if (loginSoundPlayer == null) {
-                Log.d(TAG, "Creating new MediaPlayer for login sound.")
-                loginSoundPlayer = MediaPlayer.create(this, R.raw.madoka_music)
-                loginSoundPlayer?.isLooping = true
-                loginSoundPlayer?.setOnErrorListener { mp, what, extra ->
-                    Log.e(TAG, "MediaPlayer Error: what: $what, extra: $extra")
-                    mp?.release()
-                    if (loginSoundPlayer == mp) {
-                        loginSoundPlayer = null
-                        wasLoginSoundPlaying = false
-                    }
-                    true
-                }
-                loginSoundPlayer?.setOnCompletionListener { mp ->
-                    Log.d(TAG, "Login sound MediaPlayer (looping) completed - indicates isLooping was set to false or an issue occurred.")
-                    mp.release()
-                    if (loginSoundPlayer == mp) {
-                        loginSoundPlayer = null
-                        wasLoginSoundPlaying = false
-                    }
-                }
-            }
-            loginSoundPlayer?.let {
-                if (!it.isPlaying) {
-                    Log.d(TAG, "Starting/Resuming login sound MediaPlayer (looping).")
-                    it.start()
-                    wasLoginSoundPlaying = true
-                } else {
-                     Log.d(TAG, "playLoginSound called, but player is already playing.")
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception in playLoginSound R.raw.madoka_music", e)
-            loginSoundPlayer?.release()
-            loginSoundPlayer = null
-            wasLoginSoundPlaying = false
-        }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        if (!isLoginMusicGloballyEnabled) {
-            Log.d(TAG, "Login music is globally disabled, not resuming in onStart.")
-            return
-        }
-        if (wasLoginSoundPlaying && loginSoundPlayer != null && loginSoundPlayer?.isPlaying == false) {
-            Log.d(TAG, "App started, resuming login sound MediaPlayer.")
-            try {
-                loginSoundPlayer?.start()
-            } catch (e: IllegalStateException) {
-                Log.e(TAG, "Error resuming login sound MediaPlayer in onStart", e)
-                loginSoundPlayer?.release()
-                loginSoundPlayer = null
-                wasLoginSoundPlaying = false
-            }
-        }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        loginSoundPlayer?.let {
-            if (it.isPlaying) {
-                Log.d(TAG, "App stopped, pausing login sound MediaPlayer.")
-                it.pause()
-            } else {
-                 Log.d(TAG, "App stopped, login sound player exists but is not playing.")
-            }
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        Log.d(TAG, "Releasing login sound MediaPlayer in onDestroy.")
-        loginSoundPlayer?.release()
-        loginSoundPlayer = null
-        wasLoginSoundPlaying = false
-    }
 
     private fun saveThemePreference(theme: AvailableTheme) {
         val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -296,103 +113,45 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun loadThemePreference(): AvailableTheme {
+    fun loadThemePreference(): AvailableTheme {
         val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val themeName = sharedPrefs.getString(KEY_SELECTED_THEME, null)
         return allThemes.firstOrNull { it.displayName == themeName } ?: AvailableTheme.Pink
     }
 
-    private fun saveProfileImageUriPreference(uri: String?) {
+    private fun saveLoginMusicPreference(enabled: Boolean) {
         val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         with(sharedPrefs.edit()) {
-            if (uri == null) {
-                remove(KEY_PROFILE_IMAGE_URI)
-            } else {
-                putString(KEY_PROFILE_IMAGE_URI, uri)
-            }
+            putBoolean(KEY_LOGIN_MUSIC_ENABLED, enabled)
             apply()
         }
     }
 
-    private fun loadProfileImageUriPreference(): String? {
+    private fun loadLoginMusicPreference(): Boolean {
         val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return sharedPrefs.getString(KEY_PROFILE_IMAGE_URI, null)
-    }
-
-    private fun startGoogleSignIn() {
-        val signInIntent = googleSignInClient.signInIntent
-        googleSignInLauncher.launch(signInIntent)
-    }
-
-    private fun handleIntent(intent: Intent?) {
-        intent?.let {
-            if (it.action == VideoWidgetViewsFactory.ACTION_VIEW_VIDEO || it.action == ACTION_VIEW_VIDEO) {
-                val videoId = it.getStringExtra(VideoWidgetViewsFactory.EXTRA_VIDEO_ID)
-                    ?: it.getStringExtra(EXTRA_VIDEO_ID)
-                if (videoId != null) {
-                    Log.d(TAG, "Intent to open video from widget received: $videoId")
-                    _videoIdToOpenFromWidget.value = videoId
-                } else {
-                    Log.w(TAG, "Widget intent received with null videoId for action ${it.action}")
-                }
-            }
-        }
+        return sharedPrefs.getBoolean(KEY_LOGIN_MUSIC_ENABLED, true)
     }
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        Log.d(TAG, "onNewIntent called with action: ${intent?.action}")
         setIntent(intent)
-        handleIntent(intent)
     }
 
-    @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        scheduleYoutubeSync()
-        NotificationUtils.createNotificationChannel(this)
-
-        handleIntent(intent) // Handle initial intent
 
         tokenStorageService = TokenStorageService(applicationContext)
         authApiService = AuthApiService.create()
-        authRepository = AuthRepository(authApiService)
+        authRepository = AuthRepository(authApiService) 
 
-        val (initialIsLoggedIn, initialLoginType) = loadLoginState()
-        val initialLoginMusicEnabled = loadLoginMusicPreference()
+        scheduleYoutubeSync()
+        scheduleRssSyncWorker()
 
-        googleSignInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-                try {
-                    val account = task.getResult(ApiException::class.java)
-                    account?.let { onGoogleSignInSuccessInternal(it) }
-                } catch (e: ApiException) {
-                    Log.w(TAG, "Google Sign-In failed to get account: code=${e.statusCode}, message=${e.message}")
-                    onGoogleSignInFailureInternal(e)
-                }
-            } else {
-                Log.w(TAG, "Google Sign-In cancelled or failed via launcher. Result Code: ${result.resultCode}")
-                onGoogleSignInFailureInternal(null)
-            }
-        }
-
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestServerAuthCode("1017808544125-taqamrcgk5n6rbm0llubi8t1dge6hi4c.apps.googleusercontent.com")
-            .requestEmail()
-            .requestProfile()
-            .requestScopes(Scope("https.www.googleapis.com/auth/youtube.readonly"))
-            .build()
-
-        googleSignInClient = GoogleSignIn.getClient(this, gso)
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val welcomeDialogAlreadyShown = sharedPrefs.getBoolean(KEY_WELCOME_DIALOG_SHOWN, false)
 
         setContent {
-            RequestNotificationPermission()
-
-            val windowSizeClass = calculateWindowSizeClass(this)
-            val widthSizeClass = windowSizeClass.widthSizeClass
-
             var currentAppTheme by remember { mutableStateOf(loadThemePreference()) }
             val onThemeChange: (AvailableTheme) -> Unit = remember { {
                 newTheme ->
@@ -400,121 +159,36 @@ class MainActivity : ComponentActivity() {
                     currentAppTheme = newTheme
             } }
 
-            var isLoggedIn by rememberSaveable { mutableStateOf(initialIsLoggedIn) }
-            var currentLoginType by rememberSaveable { mutableStateOf<String?>(initialLoginType) }
-            var isLoginMusicEnabledState by rememberSaveable { mutableStateOf(initialLoginMusicEnabled) }
-
-            val videoIdToOpen by _videoIdToOpenFromWidget.collectAsState()
-            val onWidgetVideoOpened = remember { { _videoIdToOpenFromWidget.value = null } }
-
-            onGoogleSignInSuccessInternal = { account ->
-                Log.d(TAG, "Google Sign-In successful (Composable context). Name: ${account.displayName}")
-                Log.d(TAG, "Server Auth Code (first 10 chars): ${account.serverAuthCode?.take(10)}...")
-                isLoggedIn = true
-                currentLoginType = "google"
-                saveLoginState(true, "google")
-
-                account.serverAuthCode?.let { authCode ->
-                    if (authCode.isNotBlank()) {
-                        lifecycleScope.launch {
-                            Log.d(TAG, "Exchanging server auth code for tokens...")
-                            val tokenResult = authRepository.exchangeCodeForTokens(authCode)
-                            tokenResult.fold(
-                                onSuccess = { tokenResponse ->
-                                    Log.i(TAG, "Tokens received successfully!")
-                                    Log.i(TAG, "Access Token (first 10): ${tokenResponse.accessToken.take(10)}...")
-                                    tokenResponse.refreshToken?.let {
-                                        Log.i(TAG, "Refresh Token (first 10): ${it.take(10)}...")
-                                    } ?: Log.i(TAG, "Refresh Token: null")
-                                    tokenStorageService.saveTokens(tokenResponse)
-                                },
-                                onFailure = { error ->
-                                    Log.e(TAG, "Failed to exchange server auth code for tokens", error)
-                                    // TODO: Handle token exchange failure (e.g., inform user, retry options?)
-                                }
-                            )
-                        }
-                    } else {
-                        Log.w(TAG, "Server auth code is blank, cannot exchange for tokens.")
-                    }
-                } ?: Log.w(TAG, "Server auth code is null, cannot exchange for tokens.")
-            }
-
-            onGoogleSignInFailureInternal = { exception ->
-                Log.w(TAG, "Google Sign-In failed (Composable context).", exception)
-            }
-
-            val onActualLoginMusicEnabledChange: (Boolean) -> Unit = remember { {
-                enabled ->
-                    onLoginMusicEnabledChanged(enabled, isLoggedIn)
-                    isLoginMusicEnabledState = enabled
-            } }
-
-            val onGuestLogin: () -> Unit = remember { {
-                isLoggedIn = true
-                currentLoginType = "guest"
-                saveLoginState(true, "guest")
-            } }
-
-            val onLogout: () -> Unit = remember { {
-                if (currentLoginType == "google") {
-                    googleSignInClient.signOut().addOnCompleteListener(this@MainActivity) { task ->
-                        Log.d(TAG, "Google Sign Out task completed. Successful: ${task.isSuccessful}")
-                    }
-                }
-                isLoggedIn = false
-                currentLoginType = null
-                saveLoginState(false)
-                tokenStorageService.clearTokens()
-                loginSoundPlayer?.apply {
-                    if (isPlaying) stop()
-                    release()
-                }
-                loginSoundPlayer = null
-                wasLoginSoundPlaying = false
-            } }
-
-            var selectedTabRoute by rememberSaveable {
-                mutableStateOf(BottomNavItem.Videos.route)
-            }
+            var isLoggedIn by rememberSaveable { mutableStateOf(false) } 
+            onLoginSuccessState = remember { { isLoggedIn = true } } 
+            
+            var selectedTabRoute by rememberSaveable { mutableStateOf(BottomNavItem.Videos.route) }
             val onSelectedTabRouteChange: (String) -> Unit = remember { { newRoute ->
                 selectedTabRoute = newRoute
             } }
 
-            var currentProfileImageUri by rememberSaveable { mutableStateOf(loadProfileImageUriPreference()) }
-            val onProfileImageUriChange: (String?) -> Unit = remember { { newUri ->
-                saveProfileImageUriPreference(newUri)
-                currentProfileImageUri = newUri
+            var isLoginMusicEnabled by rememberSaveable { mutableStateOf(loadLoginMusicPreference()) }
+            val onLoginMusicEnabledChange: (Boolean) -> Unit = remember { { enabled ->
+                saveLoginMusicPreference(enabled)
+                isLoginMusicEnabled = enabled
             } }
-            
+
+            var showWelcomeDialog by rememberSaveable { mutableStateOf(!welcomeDialogAlreadyShown) }
+            val onWelcomeDialogDismissed: () -> Unit = {
+                showWelcomeDialog = false
+                with(sharedPrefs.edit()) {
+                    putBoolean(KEY_WELCOME_DIALOG_SHOWN, true)
+                    apply()
+                }
+            }
+
             LaunchedEffect(Unit) {
-                if (isLoggedIn && currentLoginType == "google") {
-                    val lastAccount = GoogleSignIn.getLastSignedInAccount(this@MainActivity)
-                    val isTokenValid = tokenStorageService.isAccessTokenValid()
-
-                    if (lastAccount == null || !isTokenValid) {
-                        Log.w(TAG, "User was marked as Google logged in, but lastAccount is ${if(lastAccount == null) "null" else "present"} and token is ${if(isTokenValid) "valid" else "invalid/expired"}. Forcing logout.")
-                        
-                        googleSignInClient.signOut().addOnCompleteListener(this@MainActivity) { task ->
-                            Log.d(TAG, "Forced Google Sign Out during launch check. Successful: ${task.isSuccessful}")
-                        }
-                        isLoggedIn = false 
-                        currentLoginType = null
-                        saveLoginState(false) 
-                        tokenStorageService.clearTokens()
-
-                        loginSoundPlayer?.apply {
-                            if (isPlaying) stop()
-                            release()
-                        }
-                        loginSoundPlayer = null
-                        wasLoginSoundPlaying = false
-                    } else {
-                        Log.d(TAG, "User previously signed in with Google, and token is still valid.")
-                        if (!GoogleSignIn.hasPermissions(lastAccount, Scope("https.www.googleapis.com/auth/youtube.readonly"))) {
-                            Log.d(TAG, "User previously signed in but YouTube scope not granted/revoked. May need re-consent.")
-                        }
-                    }
+                if (tokenStorageService.isAccessTokenValid()) {
+                    Log.d(TAG, "Valid access token found. Setting isLoggedIn to true.")
+                    isLoggedIn = true
+                } else {
+                    Log.d(TAG, "No valid access token. Setting isLoggedIn to false.")
+                    isLoggedIn = false
                 }
             }
 
@@ -523,22 +197,16 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     AppNavigation(
-                        widthSizeClass = widthSizeClass,
                         currentAppTheme = currentAppTheme,
                         onThemeChange = onThemeChange,
-                        isLoggedIn = isLoggedIn,
-                        onGuestLogin = onGuestLogin,
-                        onLogout = onLogout,
+                        isLoggedIn = isLoggedIn, 
                         selectedTabRoute = selectedTabRoute,
                         onSelectedTabRouteChange = onSelectedTabRouteChange,
-                        onGoogleSignInRequested = ::startGoogleSignIn,
-                        profileImageUri = currentProfileImageUri,
-                        onProfileImageUriChange = onProfileImageUriChange,
-                        onPlayLoginSound = ::playLoginSound,
-                        isLoginMusicEnabled = isLoginMusicEnabledState,
-                        onLoginMusicEnabledChange = onActualLoginMusicEnabledChange,
-                        initialVideoIdToOpen = videoIdToOpen,
-                        onWidgetVideoOpened = onWidgetVideoOpened
+                        isLoginMusicEnabled = isLoginMusicEnabled,
+                        onLoginMusicEnabledChange = onLoginMusicEnabledChange,
+                        getPendingVideoId = { null },
+                        showWelcomeDialog = showWelcomeDialog, // Pass state
+                        onWelcomeDialogDismissed = onWelcomeDialogDismissed // Pass callback
                     )
                 }
             }
@@ -561,183 +229,226 @@ class MainActivity : ComponentActivity() {
             ExistingPeriodicWorkPolicy.KEEP,
             periodicSyncRequest
         )
+        Log.i(TAG, "YoutubeSyncWorker scheduled.")
+    }
+
+    fun scheduleRssSyncWorker() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val periodicRssSyncRequest = PeriodicWorkRequestBuilder<RssSyncWorker>(
+            6, TimeUnit.HOURS 
+        )
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            RssSyncWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP, 
+            periodicRssSyncRequest
+        )
+        Log.i(TAG, "RssSyncWorker scheduled to run every 6 hours.")
+    }
+
+    fun cancelRssSyncWorker() {
+        WorkManager.getInstance(this).cancelUniqueWork(RssSyncWorker.WORK_NAME)
+        Log.i(TAG, "RssSyncWorker cancelled.")
     }
 }
-
-@Composable
-fun RequestNotificationPermission() {
-    val context = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { isGranted: Boolean ->
-            if (isGranted) {
-                Log.d("NotificationPermission", "Permission Granted")
-            } else {
-                Log.d("NotificationPermission", "Permission Denied")
-            }
-        }
-    )
-
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            when (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)) {
-                PackageManager.PERMISSION_GRANTED -> {
-                    Log.d("NotificationPermission", "Permission already granted")
-                }
-                else -> {
-                    Log.d("NotificationPermission", "Requesting permission")
-                    launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
-            }
-        }
-    }
-}
-
 
 @Composable
 fun AppNavigation(
-    widthSizeClass: WindowWidthSizeClass,
     currentAppTheme: AvailableTheme,
     onThemeChange: (AvailableTheme) -> Unit,
     isLoggedIn: Boolean,
-    onGuestLogin: () -> Unit, 
-    onLogout: () -> Unit,
     selectedTabRoute: String,
     onSelectedTabRouteChange: (String) -> Unit,
-    onGoogleSignInRequested: () -> Unit,
-    profileImageUri: String?,
-    onProfileImageUriChange: (String?) -> Unit,
-    onPlayLoginSound: () -> Unit,
     isLoginMusicEnabled: Boolean,
     onLoginMusicEnabledChange: (Boolean) -> Unit,
-    initialVideoIdToOpen: String? = null,
-    onWidgetVideoOpened: () -> Unit = {}
+    getPendingVideoId: () -> String?,
+    showWelcomeDialog: Boolean, // New parameter
+    onWelcomeDialogDismissed: () -> Unit // New parameter
 ) {
-    Log.d("AppNavigation", "Composing with isLoggedIn: $isLoggedIn, initialVideoIdToOpen: $initialVideoIdToOpen")
-    val navController: NavHostController = rememberNavController() // Explicitly typed
-    var previousLoggedIn by rememberSaveable { mutableStateOf(isLoggedIn) }
+    val TAG = "AppNavigation" // Defined TAG for local scope
+    val navController = rememberNavController()
 
-    LaunchedEffect(Unit) {
-        if (isLoggedIn) {
-            Log.d("AppNavigation", "App launch: User is already logged in. Calling onPlayLoginSound()")
-            onPlayLoginSound()
-        }
-    }
-
-    LaunchedEffect(isLoggedIn) { 
-        Log.d("AppNavigation", "Login state transition check. Current isLoggedIn: $isLoggedIn, Previous: $previousLoggedIn")
-        if (isLoggedIn && !previousLoggedIn) { 
-            Log.d("AppNavigation", "User logged IN during session. Calling onPlayLoginSound()")
-            delay(100) 
-            onPlayLoginSound()
-        } else if (!isLoggedIn && previousLoggedIn) { 
-            Log.d("AppNavigation", "User logged OUT during session. Navigating to login.")
-            navController.navigate("login") {
-                popUpTo(navController.graph.id) { inclusive = true }
+    LaunchedEffect(isLoggedIn, navController) {
+        val currentRoute = navController.currentDestination?.route
+        if (currentRoute != "main_screen") {
+            navController.navigate("main_screen") {
+                popUpTo(navController.graph.id) { inclusive = true } 
                 launchSingleTop = true
             }
         }
-        previousLoggedIn = isLoggedIn 
+    }
+    
+    LaunchedEffect(Unit, isLoggedIn) {
+        if (isLoggedIn) { 
+            val pendingVideoId = getPendingVideoId()
+            if (pendingVideoId != null) {
+                Log.d(TAG, "Pending video ID found: $pendingVideoId. Navigation handled by MainScreen.")
+            }
+        }
     }
 
-    val startDestination = if (isLoggedIn) "main_screen" else "login"
-    Log.d("AppNavigation", "NavHost startDestination: $startDestination")
-
-    NavHost(navController = navController, startDestination = startDestination) {
-        composable("login") {
-            LoginScreen(
-                onLoginClicked = { _, _ -> /* TODO */ }, 
-                onSignUpClicked = { /* TODO */ },
-                onForgotPasswordClicked = { /* TODO */ },
-                onGuestLoginClicked = onGuestLogin,
-                onGoogleSignInClicked = onGoogleSignInRequested,
-                isLoginMusicEnabled = isLoginMusicEnabled,
-                onLoginMusicEnabledChange = onLoginMusicEnabledChange
-            )
-        }
+    NavHost(navController = navController, startDestination = "main_screen" ) {
         composable("main_screen") {
             MainScreen(
-                widthSizeClass = widthSizeClass,
                 currentAppTheme = currentAppTheme,
                 onThemeChange = onThemeChange,
-                onLogout = onLogout,
                 mainNavController = navController, 
                 selectedTabRoute = selectedTabRoute,
                 onSelectedTabRouteChange = onSelectedTabRouteChange,
-                profileImageUri = profileImageUri,
-                onProfileImageUriChange = onProfileImageUriChange,
                 isLoginMusicEnabled = isLoginMusicEnabled,
                 onLoginMusicEnabledChange = onLoginMusicEnabledChange,
-                initialVideoIdToOpen = initialVideoIdToOpen, // Pass down
-                onWidgetVideoOpened = onWidgetVideoOpened      // Pass down
+                getPendingVideoId = getPendingVideoId
+                // Welcome dialog will be shown from AppNavigation or MainScreen scope if needed
             )
         }
+    }
+
+    // Show Welcome Dialog if needed
+    if (showWelcomeDialog) {
+        WelcomeDialog(onDismissRequest = onWelcomeDialogDismissed)
     }
 }
 
 @Composable
 fun MainScreen(
-    widthSizeClass: WindowWidthSizeClass,
     currentAppTheme: AvailableTheme,
     onThemeChange: (AvailableTheme) -> Unit,
-    onLogout: () -> Unit,
-    mainNavController: NavController, // This remains NavController as it's passed down from AppNavigation
-    selectedTabRoute: String,
+    mainNavController: NavController, 
+    selectedTabRoute: String,        
     onSelectedTabRouteChange: (String) -> Unit,
-    profileImageUri: String?,
-    onProfileImageUriChange: (String?) -> Unit,
     isLoginMusicEnabled: Boolean,
     onLoginMusicEnabledChange: (Boolean) -> Unit,
-    initialVideoIdToOpen: String? = null,
-    onWidgetVideoOpened: () -> Unit = {}
+    getPendingVideoId: () -> String?
 ) {
-    val innerNavController: NavHostController = rememberNavController() // Explicitly typed
+    val TAG = "MainScreen" // Defined TAG for local scope
+    val innerNavController = rememberNavController()
+    val videosViewModel: VideosViewModel = viewModel()
+
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
     val navBackStackEntry by innerNavController.currentBackStackEntryAsState()
     val currentInnerDestination = navBackStackEntry?.destination
 
-    LaunchedEffect(innerNavController, selectedTabRoute) {
-        if (currentInnerDestination?.route != selectedTabRoute) {
-            innerNavController.navigate(selectedTabRoute) {
-                popUpTo(innerNavController.graph.findStartDestination().id) {
-                    saveState = true
+    val showBottomBar = remember(currentInnerDestination) {
+        currentInnerDestination?.route?.startsWith("video_detail/") == false
+    }
+
+    LaunchedEffect(Unit, innerNavController) {
+        val videoId = getPendingVideoId()
+        if (videoId != null) {
+            Log.d(TAG, "Pending video ID $videoId found. Navigating on innerNavController.")
+            if (innerNavController.currentDestination?.route?.startsWith("video_detail/") == false &&
+                selectedTabRoute != BottomNavItem.Videos.route) {
+                 innerNavController.navigate(BottomNavItem.Videos.route) {
+                    popUpTo(innerNavController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
                 }
-                launchSingleTop = true
-                restoreState = true
+                 onSelectedTabRouteChange(BottomNavItem.Videos.route)
+            }
+            innerNavController.navigate("video_detail/$videoId")
+        }
+    }
+
+    LaunchedEffect(isLoginMusicEnabled, context) {
+        if (isLoginMusicEnabled) {
+            var playerInstance = mediaPlayer
+            if (playerInstance == null) {
+                Log.d(TAG, "MediaPlayer is null, creating.")
+                playerInstance = MediaPlayer.create(context, R.raw.madoka_music)
+                playerInstance?.isLooping = true
+                mediaPlayer = playerInstance
+            }
+            playerInstance?.let { p ->
+                if (!p.isPlaying) {
+                    try {
+                        Log.d(TAG, "Attempting to start MediaPlayer.")
+                        p.start()
+                    } catch (e: IllegalStateException) {
+                        Log.e(TAG, "Error starting MediaPlayer: ${e.message}. Releasing and re-creating.")
+                        try { p.release() } catch (re: Exception) { Log.e(TAG, "Error releasing faulty player: ${re.message}") }
+                        mediaPlayer = MediaPlayer.create(context, R.raw.madoka_music)?.apply {
+                            isLooping = true
+                            try { start(); Log.d(TAG, "Successfully started after re-creation.") }
+                            catch (e2: IllegalStateException) { Log.e(TAG, "Error starting MediaPlayer on second attempt: ${e2.message}") }
+                        }
+                    }
+                }
+            }
+        } else {
+            mediaPlayer?.let {
+                if (it.isPlaying) {
+                    Log.d(TAG, "Pausing MediaPlayer because isLoginMusicEnabled is false.")
+                    try { it.pause() } catch (e: IllegalStateException) { Log.e(TAG, "Error pausing MediaPlayer: ${e.message}") }
+                }
             }
         }
     }
 
-    LaunchedEffect(initialVideoIdToOpen) {
-        if (initialVideoIdToOpen != null) {
-            Log.d("MainScreen", "Widget requested to open video: $initialVideoIdToOpen. Navigating innerNavController.")
-            if (selectedTabRoute != BottomNavItem.Videos.route) {
-                onSelectedTabRouteChange(BottomNavItem.Videos.route)
+    DisposableEffect(lifecycleOwner) {
+        val lifecycleObserver = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    if (isLoginMusicEnabled && mediaPlayer?.isPlaying == true) {
+                        Log.d(TAG, "Pausing MediaPlayer on ON_PAUSE")
+                        try { mediaPlayer?.pause() } catch (e: IllegalStateException) { Log.e(TAG, "Error pausing MediaPlayer in ON_PAUSE: ${e.message}") }
+                    }
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    if (isLoginMusicEnabled && mediaPlayer != null && mediaPlayer?.isPlaying == false) {
+                        try {
+                            Log.d(TAG, "Starting MediaPlayer on ON_RESUME")
+                            mediaPlayer?.start() 
+                        } catch (e: IllegalStateException) { Log.e(TAG, "Error starting MediaPlayer on ON_RESUME: ${e.message}") }
+                    }
+                }
+                else -> Unit
             }
-            innerNavController.navigate("video_detail/$initialVideoIdToOpen") {
-                launchSingleTop = true 
+        }
+        lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+        onDispose {
+            Log.d(TAG, "Disposing MediaPlayer in MainScreen")
+            lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
+            mediaPlayer?.let {
+                try { if (it.isPlaying) { it.stop() }; it.release() }
+                catch (e: Exception) { Log.e(TAG, "Error stopping/releasing MediaPlayer in onDispose: ${e.message}") }
             }
-            onWidgetVideoOpened() // Reset the trigger so it doesn't re-fire on recomposition
+            mediaPlayer = null
         }
     }
 
     Scaffold(
         bottomBar = {
-            if (widthSizeClass == WindowWidthSizeClass.Compact) {
-                NavigationBar {
+            AnimatedVisibility(
+                visible = showBottomBar,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                NavigationBar(
+                    // Modifiers for padding and clip removed to make it non-floating
+                ) {
                     bottomNavItems.forEach { screen ->
                         NavigationBarItem(
                             selected = currentInnerDestination?.hierarchy?.any { it.route == screen.route } == true,
                             onClick = {
                                 if (currentInnerDestination?.route != screen.route) {
+                                    innerNavController.navigate(screen.route) {
+                                        popUpTo(innerNavController.graph.findStartDestination().id) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                     onSelectedTabRouteChange(screen.route)
                                 }
                             },
                             icon = {
-                                val iconVector = if (currentInnerDestination?.hierarchy?.any { it.route == screen.route } == true) {
-                                    screen.icon
-                                } else {
-                                    screen.outlinedIcon
-                                }
+                                val iconVector = if (currentInnerDestination?.hierarchy?.any { it.route == screen.route } == true) screen.icon else screen.outlinedIcon
                                 Icon(imageVector = iconVector, contentDescription = screen.label)
                             },
                             label = { Text(screen.label) }
@@ -746,70 +457,38 @@ fun MainScreen(
                 }
             }
         }
-    ) { paddingValues -> 
-        Row(
-            Modifier
-                .fillMaxSize()
-                .padding(paddingValues) 
+    ) { paddingValues ->
+        NavHost(
+            navController = innerNavController,
+            startDestination = selectedTabRoute, 
+            modifier = Modifier.padding(paddingValues).fillMaxSize()
         ) {
-            if (widthSizeClass != WindowWidthSizeClass.Compact) {
-                NavigationRail { 
-                    bottomNavItems.forEach { screen ->
-                        NavigationRailItem(
-                            selected = currentInnerDestination?.hierarchy?.any { it.route == screen.route } == true,
-                            onClick = {
-                                if (currentInnerDestination?.route != screen.route) {
-                                    onSelectedTabRouteChange(screen.route)
-                                }
-                            },
-                            icon = {
-                                val iconVector = if (currentInnerDestination?.hierarchy?.any { it.route == screen.route } == true) {
-                                    screen.icon
-                                } else {
-                                    screen.outlinedIcon
-                                }
-                                Icon(imageVector = iconVector, contentDescription = screen.label)
-                            },
-                            label = { Text(screen.label) },
-                            alwaysShowLabel = false
-                        )
-                    }
-                }
+            composable(BottomNavItem.Videos.route) {
+                VideosScreen(navController = innerNavController, viewModel = videosViewModel)
             }
-            NavHost(
-                navController = innerNavController,
-                startDestination = selectedTabRoute, 
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxSize()
-            ) {
-                composable(BottomNavItem.Videos.route) {
-                    VideosScreen(
-                        navController = innerNavController, 
-                        profileImageUri = profileImageUri
-                    )
-                }
-                composable(BottomNavItem.FanArt.route) { FanArtScreen(navController = innerNavController) }
-                composable(BottomNavItem.Profile.route) { 
-                    ProfileScreen(
-                        navController = mainNavController, 
-                        currentAppTheme = currentAppTheme,
-                        onThemeChange = onThemeChange,
-                        onLogout = onLogout,
-                        profileImageUri = profileImageUri,
-                        onProfileImageUriChange = onProfileImageUriChange,
-                        isLoginMusicEnabled = isLoginMusicEnabled,
-                        onLoginMusicEnabledChange = onLoginMusicEnabledChange
-                    ) 
-                }
-                composable(
-                    route = "video_detail/{videoId}",
-                    arguments = listOf(navArgument("videoId") { type = NavType.StringType })
-                ) { backStackEntry ->
+            composable(BottomNavItem.Settings.route) {
+                SettingsScreen(
+                    navController = innerNavController,
+                    currentAppTheme = currentAppTheme,
+                    onThemeChange = onThemeChange,
+                    isLoginMusicEnabled = isLoginMusicEnabled,
+                    onLoginMusicEnabledChange = onLoginMusicEnabledChange
+                )
+            }
+            composable(
+                route = "video_detail/{videoId}",
+                arguments = listOf(navArgument("videoId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val videoId = backStackEntry.arguments?.getString("videoId")
+                if (videoId != null) {
                     VideoDetailScreen(
                         navController = innerNavController,
-                        videoId = backStackEntry.arguments?.getString("videoId") ?: ""
+                        videoId = videoId,
+                        videosViewModel = videosViewModel
                     )
+                } else {
+                    Log.e(TAG, "Error: videoId was null for VideoDetailScreen.")
+                    Text("Error loading video details. Video ID missing.") 
                 }
             }
         }
