@@ -13,13 +13,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-// import androidx.compose.foundation.shape.RoundedCornerShape // No longer needed for Nav Bar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Settings
-// import androidx.compose.material.icons.filled.Favorite // Not used
 import androidx.compose.material.icons.filled.Videocam
-// import androidx.compose.material.icons.outlined.FavoriteBorder // Not used
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -36,11 +33,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-// import androidx.compose.ui.draw.clip // No longer needed for Nav Bar
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.unit.dp
+// import androidx.compose.ui.unit.dp // Not used directly in this file after removals
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -58,9 +54,9 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import com.kawaii.meowbah.data.AuthRepository
-import com.kawaii.meowbah.data.TokenStorageService
-import com.kawaii.meowbah.data.remote.AuthApiService
+// import com.kawaii.meowbah.data.AuthRepository // Removed
+// import com.kawaii.meowbah.data.TokenStorageService // Removed
+// import com.kawaii.meowbah.data.remote.AuthApiService // Removed
 import com.kawaii.meowbah.ui.dialogs.WelcomeDialog
 import com.kawaii.meowbah.ui.screens.SettingsScreen
 import com.kawaii.meowbah.ui.screens.VideosScreen
@@ -69,8 +65,7 @@ import com.kawaii.meowbah.ui.screens.videos.VideosViewModel
 import com.kawaii.meowbah.ui.theme.AvailableTheme
 import com.kawaii.meowbah.ui.theme.MeowbahTheme
 import com.kawaii.meowbah.ui.theme.allThemes
-// import com.kawaii.meowbah.widgets.VideoWidgetViewsFactory // Widget import removed
-import com.kawaii.meowbah.workers.RssSyncWorker
+// import com.kawaii.meowbah.workers.RssSyncWorker // Removed
 import com.kawaii.meowbah.workers.YoutubeSyncWorker
 import java.util.concurrent.TimeUnit
 
@@ -98,12 +93,6 @@ class MainActivity : ComponentActivity() {
         private const val KEY_WELCOME_DIALOG_SHOWN = "welcomeDialogShown"
         private const val TAG = "MainActivity"
     }
-    
-    private lateinit var onLoginSuccessState: () -> Unit 
-
-    private lateinit var authApiService: AuthApiService
-    private lateinit var authRepository: AuthRepository 
-    private lateinit var tokenStorageService: TokenStorageService
 
     private fun saveThemePreference(theme: AvailableTheme) {
         val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -141,12 +130,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        tokenStorageService = TokenStorageService(applicationContext)
-        authApiService = AuthApiService.create()
-        authRepository = AuthRepository(authApiService) 
-
-        scheduleYoutubeSync()
-        scheduleRssSyncWorker()
+        scheduleYoutubeSync() // This worker has been refactored to use RSS
+        // scheduleRssSyncWorker() // Removed
 
         val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val welcomeDialogAlreadyShown = sharedPrefs.getBoolean(KEY_WELCOME_DIALOG_SHOWN, false)
@@ -159,9 +144,6 @@ class MainActivity : ComponentActivity() {
                     currentAppTheme = newTheme
             } }
 
-            var isLoggedIn by rememberSaveable { mutableStateOf(false) } 
-            onLoginSuccessState = remember { { isLoggedIn = true } } 
-            
             var selectedTabRoute by rememberSaveable { mutableStateOf(BottomNavItem.Videos.route) }
             val onSelectedTabRouteChange: (String) -> Unit = remember { { newRoute ->
                 selectedTabRoute = newRoute
@@ -182,16 +164,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            LaunchedEffect(Unit) {
-                if (tokenStorageService.isAccessTokenValid()) {
-                    Log.d(TAG, "Valid access token found. Setting isLoggedIn to true.")
-                    isLoggedIn = true
-                } else {
-                    Log.d(TAG, "No valid access token. Setting isLoggedIn to false.")
-                    isLoggedIn = false
-                }
-            }
-
             MeowbahTheme(currentSelectedTheme = currentAppTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -199,17 +171,24 @@ class MainActivity : ComponentActivity() {
                     AppNavigation(
                         currentAppTheme = currentAppTheme,
                         onThemeChange = onThemeChange,
-                        isLoggedIn = isLoggedIn, 
                         selectedTabRoute = selectedTabRoute,
                         onSelectedTabRouteChange = onSelectedTabRouteChange,
                         isLoginMusicEnabled = isLoginMusicEnabled,
                         onLoginMusicEnabledChange = onLoginMusicEnabledChange,
-                        getPendingVideoId = { null },
-                        showWelcomeDialog = showWelcomeDialog, // Pass state
-                        onWelcomeDialogDismissed = onWelcomeDialogDismissed // Pass callback
+                        getPendingVideoId = { getPendingVideoIdFromIntent(intent) },
+                        showWelcomeDialog = showWelcomeDialog,
+                        onWelcomeDialogDismissed = onWelcomeDialogDismissed
                     )
                 }
             }
+        }
+    }
+
+    private fun getPendingVideoIdFromIntent(intent: Intent?): String? {
+        return if (intent?.action == Intent.ACTION_VIEW && intent.data?.host == "www.youtube.com") {
+            intent.data?.getQueryParameter("v")
+        } else {
+            intent?.getStringExtra("com.kawaii.meowbah.EXTRA_VIDEO_ID")
         }
     }
 
@@ -219,76 +198,50 @@ class MainActivity : ComponentActivity() {
             .build()
 
         val periodicSyncRequest = PeriodicWorkRequestBuilder<YoutubeSyncWorker>(
-            12, TimeUnit.HOURS
+            30, TimeUnit.MINUTES // Changed from 12 HOURS to 30 MINUTES
         )
             .setConstraints(constraints)
             .build()
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             YoutubeSyncWorker.WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.KEEP, // Ensures only one instance of the worker runs
             periodicSyncRequest
         )
-        Log.i(TAG, "YoutubeSyncWorker scheduled.")
+        Log.i(TAG, "YoutubeSyncWorker (RSS) scheduled to run every 30 minutes.")
     }
 
-    fun scheduleRssSyncWorker() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-
-        val periodicRssSyncRequest = PeriodicWorkRequestBuilder<RssSyncWorker>(
-            6, TimeUnit.HOURS 
-        )
-            .setConstraints(constraints)
-            .build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            RssSyncWorker.WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP, 
-            periodicRssSyncRequest
-        )
-        Log.i(TAG, "RssSyncWorker scheduled to run every 6 hours.")
-    }
-
-    fun cancelRssSyncWorker() {
-        WorkManager.getInstance(this).cancelUniqueWork(RssSyncWorker.WORK_NAME)
-        Log.i(TAG, "RssSyncWorker cancelled.")
-    }
 }
 
 @Composable
 fun AppNavigation(
     currentAppTheme: AvailableTheme,
     onThemeChange: (AvailableTheme) -> Unit,
-    isLoggedIn: Boolean,
     selectedTabRoute: String,
     onSelectedTabRouteChange: (String) -> Unit,
     isLoginMusicEnabled: Boolean,
     onLoginMusicEnabledChange: (Boolean) -> Unit,
     getPendingVideoId: () -> String?,
-    showWelcomeDialog: Boolean, // New parameter
-    onWelcomeDialogDismissed: () -> Unit // New parameter
+    showWelcomeDialog: Boolean,
+    onWelcomeDialogDismissed: () -> Unit
 ) {
-    val TAG = "AppNavigation" // Defined TAG for local scope
+    val TAG = "AppNavigation"
     val navController = rememberNavController()
 
-    LaunchedEffect(isLoggedIn, navController) {
+    LaunchedEffect(navController) {
         val currentRoute = navController.currentDestination?.route
         if (currentRoute != "main_screen") {
             navController.navigate("main_screen") {
-                popUpTo(navController.graph.id) { inclusive = true } 
+                popUpTo(navController.graph.id) { inclusive = true }
                 launchSingleTop = true
             }
         }
     }
     
-    LaunchedEffect(Unit, isLoggedIn) {
-        if (isLoggedIn) { 
-            val pendingVideoId = getPendingVideoId()
-            if (pendingVideoId != null) {
-                Log.d(TAG, "Pending video ID found: $pendingVideoId. Navigation handled by MainScreen.")
-            }
+    LaunchedEffect(Unit) {
+        val pendingVideoId = getPendingVideoId()
+        if (pendingVideoId != null) {
+            Log.d(TAG, "Pending video ID found: $pendingVideoId. This will be handled by MainScreen.")
         }
     }
 
@@ -297,18 +250,16 @@ fun AppNavigation(
             MainScreen(
                 currentAppTheme = currentAppTheme,
                 onThemeChange = onThemeChange,
-                mainNavController = navController, 
+                mainNavController = navController,
                 selectedTabRoute = selectedTabRoute,
                 onSelectedTabRouteChange = onSelectedTabRouteChange,
                 isLoginMusicEnabled = isLoginMusicEnabled,
                 onLoginMusicEnabledChange = onLoginMusicEnabledChange,
                 getPendingVideoId = getPendingVideoId
-                // Welcome dialog will be shown from AppNavigation or MainScreen scope if needed
             )
         }
     }
 
-    // Show Welcome Dialog if needed
     if (showWelcomeDialog) {
         WelcomeDialog(onDismissRequest = onWelcomeDialogDismissed)
     }
@@ -318,17 +269,16 @@ fun AppNavigation(
 fun MainScreen(
     currentAppTheme: AvailableTheme,
     onThemeChange: (AvailableTheme) -> Unit,
-    mainNavController: NavController, 
-    selectedTabRoute: String,        
+    mainNavController: NavController,
+    selectedTabRoute: String,
     onSelectedTabRouteChange: (String) -> Unit,
     isLoginMusicEnabled: Boolean,
     onLoginMusicEnabledChange: (Boolean) -> Unit,
     getPendingVideoId: () -> String?
 ) {
-    val TAG = "MainScreen" // Defined TAG for local scope
+    val TAG = "MainScreen"
     val innerNavController = rememberNavController()
     val videosViewModel: VideosViewModel = viewModel()
-
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
@@ -339,21 +289,30 @@ fun MainScreen(
     val showBottomBar = remember(currentInnerDestination) {
         currentInnerDestination?.route?.startsWith("video_detail/") == false
     }
+    
+    LaunchedEffect(selectedTabRoute) {
+        if (innerNavController.currentDestination?.route != selectedTabRoute) {
+             innerNavController.navigate(selectedTabRoute) {
+                popUpTo(innerNavController.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
 
-    LaunchedEffect(Unit, innerNavController) {
+    LaunchedEffect(Unit) {
         val videoId = getPendingVideoId()
         if (videoId != null) {
-            Log.d(TAG, "Pending video ID $videoId found. Navigating on innerNavController.")
-            if (innerNavController.currentDestination?.route?.startsWith("video_detail/") == false &&
-                selectedTabRoute != BottomNavItem.Videos.route) {
-                 innerNavController.navigate(BottomNavItem.Videos.route) {
-                    popUpTo(innerNavController.graph.findStartDestination().id) { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
+            Log.d(TAG, "Pending video ID $videoId found in MainScreen. Navigating on innerNavController.")
+            if (selectedTabRoute != BottomNavItem.Videos.route) {
                  onSelectedTabRouteChange(BottomNavItem.Videos.route)
             }
-            innerNavController.navigate("video_detail/$videoId")
+            innerNavController.navigate("video_detail/$videoId") {
+                 popUpTo(innerNavController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+            }
         }
     }
 
@@ -405,7 +364,7 @@ fun MainScreen(
                     if (isLoginMusicEnabled && mediaPlayer != null && mediaPlayer?.isPlaying == false) {
                         try {
                             Log.d(TAG, "Starting MediaPlayer on ON_RESUME")
-                            mediaPlayer?.start() 
+                            mediaPlayer?.start()
                         } catch (e: IllegalStateException) { Log.e(TAG, "Error starting MediaPlayer on ON_RESUME: ${e.message}") }
                     }
                 }
@@ -431,25 +390,23 @@ fun MainScreen(
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
-                NavigationBar(
-                    // Modifiers for padding and clip removed to make it non-floating
-                ) {
+                NavigationBar {
                     bottomNavItems.forEach { screen ->
+                        val isSelected = currentInnerDestination?.hierarchy?.any { it.route == screen.route } == true || selectedTabRoute == screen.route
                         NavigationBarItem(
-                            selected = currentInnerDestination?.hierarchy?.any { it.route == screen.route } == true,
+                            selected = isSelected,
                             onClick = {
                                 if (currentInnerDestination?.route != screen.route) {
+                                    onSelectedTabRouteChange(screen.route)
                                     innerNavController.navigate(screen.route) {
                                         popUpTo(innerNavController.graph.findStartDestination().id) { saveState = true }
                                         launchSingleTop = true
                                         restoreState = true
                                     }
-                                    onSelectedTabRouteChange(screen.route)
                                 }
                             },
                             icon = {
-                                val iconVector = if (currentInnerDestination?.hierarchy?.any { it.route == screen.route } == true) screen.icon else screen.outlinedIcon
-                                Icon(imageVector = iconVector, contentDescription = screen.label)
+                                Icon(imageVector = if (isSelected) screen.icon else screen.outlinedIcon, contentDescription = screen.label)
                             },
                             label = { Text(screen.label) }
                         )
@@ -460,7 +417,7 @@ fun MainScreen(
     ) { paddingValues ->
         NavHost(
             navController = innerNavController,
-            startDestination = selectedTabRoute, 
+            startDestination = BottomNavItem.Videos.route, 
             modifier = Modifier.padding(paddingValues).fillMaxSize()
         ) {
             composable(BottomNavItem.Videos.route) {
@@ -488,7 +445,7 @@ fun MainScreen(
                     )
                 } else {
                     Log.e(TAG, "Error: videoId was null for VideoDetailScreen.")
-                    Text("Error loading video details. Video ID missing.") 
+                    Text("Error loading video details. Video ID missing.")
                 }
             }
         }

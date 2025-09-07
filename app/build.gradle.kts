@@ -26,20 +26,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // Read API key from local.properties and add to BuildConfig
-        val youtubeApiKeyFromProperties = properties.getProperty("YOUTUBE_API_KEY") ?: ""
-        // Escape backslashes and double quotes in the key for safe embedding in Java string literal
-        val escapedYoutubeApiKey = youtubeApiKeyFromProperties
-            .replace("\\", "\\\\") // Replace \ with \\
-            .replace("\"", "\\\"") // Replace " with \"
-        buildConfigField("String", "YOUTUBE_API_KEY", "\"$escapedYoutubeApiKey\"")
-
-        // Read Channel ID from local.properties and add to BuildConfig
-        val youtubeChannelIdFromProperties = properties.getProperty("YOUTUBE_CHANNEL_ID") ?: ""
-        val escapedYoutubeChannelId = youtubeChannelIdFromProperties
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-        buildConfigField("String", "YOUTUBE_CHANNEL_ID", "\"$escapedYoutubeChannelId\"")
+        // Removed YOUTUBE_API_KEY and YOUTUBE_CHANNEL_ID BuildConfig fields
     }
 
     buildTypes {
@@ -57,7 +44,7 @@ android {
     }
     buildFeatures {
         compose = true
-        buildConfig = true // Ensure buildConfig is enabled
+        buildConfig = true // Keep true if other BuildConfig fields might be used, or set to false if none are left.
     }
     composeOptions {
         kotlinCompilerExtensionVersion = libs.versions.androidxComposeCompiler.get()
@@ -89,13 +76,13 @@ dependencies {
 
     implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.material.icons.extended)
-    implementation(libs.retrofit) // This should be com.squareup.retrofit2:retrofit
-    implementation(libs.converter.gson) // This should be com.squareup.retrofit2:converter-gson
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0") // Added OkHttp Logging Interceptor
+    // implementation(libs.retrofit) // Removed
+    // implementation(libs.converter.gson) // Removed
+    // implementation("com.squareup.okhttp3:logging-interceptor:4.12.0") // Removed
     implementation(libs.coil.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.work.runtime.ktx) // Added WorkManager
-    implementation("com.google.android.gms:play-services-auth:21.4.0") // Added Google Play Services Auth
+    // implementation("com.google.android.gms:play-services-auth:21.4.0") // Removed
     implementation("androidx.security:security-crypto:1.1.0") // Added for EncryptedSharedPreferences
 
     testImplementation(libs.junit)

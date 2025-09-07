@@ -59,7 +59,7 @@ import coil.request.ImageRequest
 import com.kawaii.meowbah.R
 import com.kawaii.meowbah.data.CachedVideoInfo
 import com.kawaii.meowbah.ui.screens.videos.VideosViewModel
-import java.io.File
+// import java.io.File // No longer needed
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -80,7 +80,6 @@ fun VideosScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
-    // Define the YouTube channel URL - Assuming the channel ID is UC6GUr63276jX75XNn7M9uYw
     val youtubeChannelUrl = "https://www.youtube.com/@Meowbahx"
 
     val speechRecognizerLauncher = rememberLauncherForActivityResult(
@@ -132,7 +131,6 @@ fun VideosScreen(
                     }
                 }
             ) {
-                // Filter videos by title only
                 val filteredVideos = videosState.filter {
                     it.title.contains(searchQuery, ignoreCase = true)
                 }
@@ -149,7 +147,7 @@ fun VideosScreen(
                                 headlineContent = { Text(video.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 leadingContent = {
                                     AsyncImage(
-                                        model = video.cachedThumbnailPath?.let { File(it) } ?: R.drawable.ic_placeholder,
+                                        model = video.thumbnailUrl ?: R.drawable.ic_placeholder, // Changed to thumbnailUrl
                                         contentDescription = "Thumbnail for ${video.title}",
                                         modifier = Modifier.size(56.dp).clip(MaterialTheme.shapes.small),
                                         contentScale = ContentScale.Crop,
@@ -195,7 +193,7 @@ fun VideosScreen(
                             navController.navigate("video_detail/${clickedVideo.id}")
                         })
                     }
-                    if (videosState.isNotEmpty()) { // Show button only if there are videos
+                    if (videosState.isNotEmpty()) { 
                         item {
                             FilledTonalButton(
                                 onClick = {
@@ -204,7 +202,7 @@ fun VideosScreen(
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 16.dp) // Add some padding around the button
+                                    .padding(vertical = 16.dp) 
                             ) {
                                 Text("Show More on YouTube")
                             }
@@ -241,7 +239,7 @@ fun VideoListItem(video: CachedVideoInfo, onVideoClick: (CachedVideoInfo) -> Uni
         Column {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(video.cachedThumbnailPath?.let { File(it) } ?: R.drawable.ic_placeholder)
+                    .data(video.thumbnailUrl ?: R.drawable.ic_placeholder) // Changed to thumbnailUrl
                     .crossfade(true)
                     .error(R.drawable.ic_placeholder)
                     .placeholder(R.drawable.ic_placeholder)
@@ -265,13 +263,12 @@ fun VideoListItem(video: CachedVideoInfo, onVideoClick: (CachedVideoInfo) -> Uni
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                // Description Text composable removed from here
                 Text(
                     text = publishedDateFormatted,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 4.dp) // Adjusted padding if necessary
+                    modifier = Modifier.padding(top = 4.dp) 
                 )
             }
         }

@@ -26,7 +26,7 @@ import com.kawaii.meowbah.R
 import com.kawaii.meowbah.data.CachedVideoInfo // Changed from VideoItem
 import com.kawaii.meowbah.ui.screens.videos.VideosViewModel 
 // import com.kawaii.meowbah.ui.screens.videos.formatViewCount // formatViewCount might be removed if stats are gone
-import java.io.File // For loading image from path
+// import java.io.File // For loading image from path - Removed
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -142,7 +142,7 @@ fun VideoDetailContent(
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(videoItem.cachedThumbnailPath?.let { File(it) } ?: R.drawable.ic_placeholder)
+                    .data(videoItem.thumbnailUrl ?: R.drawable.ic_placeholder) // Corrected: Use thumbnailUrl
                     .crossfade(true)
                     .error(R.drawable.ic_placeholder)
                     .placeholder(R.drawable.ic_placeholder)
