@@ -23,6 +23,7 @@ data class PlaceholderId(
 )
 
 data class PlaceholderSnippet(
+    val publishedAt: String?, // Added this line
     val title: String?,
     val channelTitle: String?,
     val description: String?,

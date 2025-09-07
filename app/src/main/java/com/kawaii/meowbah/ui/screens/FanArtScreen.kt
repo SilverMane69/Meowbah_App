@@ -98,7 +98,9 @@ fun FanArtScreen(navController: NavController) {
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { /* TODO: Handle Add Fan Art action */ },
+                onClick = {
+ TODO: Handle Add Fan Art action
+ },
                 icon = { Icon(Icons.Filled.Add, contentDescription = "Add new fan art") },
                 text = { Text("Add New Fan Art") },
                 shape = RoundedCornerShape(16.dp) // Pill shape

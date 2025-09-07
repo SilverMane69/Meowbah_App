@@ -6,14 +6,16 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.kawaii.meowbah.BuildConfig
 import com.kawaii.meowbah.data.remote.YoutubeApiService
-import com.kawaii.meowbah.data.YoutubeRepository // Assuming this import is correct and the file/class is accessible
-// Explicitly import PlaceholderYoutubeVideoItem to avoid alias issues
-import com.kawaii.meowbah.ui.screens.videos.PlaceholderYoutubeVideoItem 
+import com.kawaii.meowbah.data.YoutubeRepository
+import com.kawaii.meowbah.ui.screens.videos.PlaceholderYoutubeVideoItem
 import com.kawaii.meowbah.ui.activities.NotificationUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import retrofit2.HttpException
 import java.io.IOException
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 
 class YoutubeSyncWorker(appContext: Context, workerParams: WorkerParameters) :
     CoroutineWorker(appContext, workerParams) {
@@ -23,59 +25,107 @@ class YoutubeSyncWorker(appContext: Context, workerParams: WorkerParameters) :
         private const val TAG = "YoutubeSyncWorker"
         private const val PREFS_NAME = "YoutubeSyncPrefs"
         private const val KEY_NOTIFIED_VIDEO_IDS = "notifiedVideoIds"
+        // Stores the ISO 8601 timestamp of the newest video for which a notification was sent
+        private const val KEY_LAST_PROCESSED_NEWEST_PUBLISHED_AT = "lastProcessedNewestPublishedAt"
     }
 
     override suspend fun doWork(): Result {
         Log.d(TAG, "Starting Youtube sync work")
-        // This line assumes YoutubeRepository from com.kawaii.meowbah.data is resolved
+
+        // This assumes YoutubeApiService.create() does not require TokenStorageService
+        // as the user previously rejected changes to its signature for this worker's context.
         val youtubeRepository = YoutubeRepository(YoutubeApiService.create())
         val prefs = applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val notifiedVideoIds = prefs.getStringSet(KEY_NOTIFIED_VIDEO_IDS, emptySet()) ?: emptySet()
+        
+        val notifiedVideoIds = prefs.getStringSet(KEY_NOTIFIED_VIDEO_IDS, mutableSetOf()) ?: mutableSetOf()
+        val lastProcessedNewestPublishedAtString = prefs.getString(KEY_LAST_PROCESSED_NEWEST_PUBLISHED_AT, null)
+
+        var lastKnownNewestVideoDate: OffsetDateTime? = null
+        if (lastProcessedNewestPublishedAtString != null) {
+            try {
+                lastKnownNewestVideoDate = OffsetDateTime.parse(lastProcessedNewestPublishedAtString, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                Log.d(TAG, "Loaded last processed newest video date: $lastKnownNewestVideoDate")
+            } catch (e: DateTimeParseException) {
+                Log.e(TAG, "Error parsing stored last processed date: $lastProcessedNewestPublishedAtString", e)
+            }
+        } else {
+            Log.d(TAG, "No last processed newest video date found in SharedPreferences.")
+        }
 
         return withContext(Dispatchers.IO) {
             try {
                 val response = youtubeRepository.getChannelVideos(
-                    part = "snippet", 
-                    channelId = "UCzUnbX-2S2mMcfdd1jR2g-Q", 
+                    part = "snippet",
+                    channelId = "UCzUnbX-2S2mMcfdd1jR2g-Q", // Meowbah's Channel ID from previous context
                     apiKey = BuildConfig.YOUTUBE_API_KEY,
-                    maxResults = 10,
+                    maxResults = 50, 
                     type = "video",
-                    order = "date" 
+                    order = "date" // Newest videos first
                 )
 
                 if (response.isSuccessful) {
-                    // response.body() is PlaceholderYoutubeVideoListResponse?
-                    // .items is List<PlaceholderYoutubeVideoItem>?
                     val videoItemList: List<PlaceholderYoutubeVideoItem>? = response.body()?.items
 
                     if (videoItemList != null) {
-                        Log.d(TAG, "Successfully fetched ${videoItemList.size} videos")
-                        val newNotifiedIds = notifiedVideoIds.toMutableSet()
-                        var newVideosFound = 0
+                        Log.d(TAG, "Successfully fetched ${videoItemList.size} videos.")
+                        val tempNotifiedIds = notifiedVideoIds.toMutableSet()
+                        var newVideosFoundThisRun = false
+                        var currentBatchOverallNewestVideoDate = lastKnownNewestVideoDate
 
-                        // videoItem is now explicitly PlaceholderYoutubeVideoItem
-                        for (videoItem: PlaceholderYoutubeVideoItem in videoItemList.reversed()) { 
-                            // Accessing fields from PlaceholderYoutubeVideoItem, PlaceholderId, PlaceholderSnippet
-                            val videoId = videoItem.id?.videoId 
+                        for (videoItem: PlaceholderYoutubeVideoItem in videoItemList) {
+                            val videoId = videoItem.id?.videoId
                             val videoTitle = videoItem.snippet?.title
+                            val videoPublishedAtString = videoItem.snippet?.publishedAt
 
-                            if (videoId != null && videoTitle != null && !notifiedVideoIds.contains(videoId)) {
-                                Log.d(TAG, "New video found: $videoTitle (ID: $videoId)")
-                                NotificationUtils.showNewVideoNotification(
-                                    applicationContext,
-                                    videoTitle, 
-                                    videoId    
-                                )
-                                newNotifiedIds.add(videoId) 
-                                newVideosFound++
+                            if (videoId == null || videoTitle == null || videoPublishedAtString == null) {
+                                Log.w(TAG, "Skipping video with missing ID, title, or publishedAt: $videoItem")
+                                continue
+                            }
+
+                            val currentVideoDate: OffsetDateTime = try {
+                                OffsetDateTime.parse(videoPublishedAtString, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                            } catch (e: DateTimeParseException) {
+                                Log.e(TAG, "Error parsing video publishedAt date: $videoPublishedAtString for video ID $videoId", e)
+                                continue 
+                            }
+
+                            if (lastKnownNewestVideoDate != null && !currentVideoDate.isAfter(lastKnownNewestVideoDate)) {
+                                Log.d(TAG, "Video $videoTitle (Published: $currentVideoDate) is not newer than last processed ($lastKnownNewestVideoDate). Stopping check.")
+                                break 
+                            }
+
+                            if (tempNotifiedIds.contains(videoId)) {
+                                Log.d(TAG, "Video $videoTitle (ID: $videoId) already in notified set, skipping.")
+                                continue
+                            }
+
+                            Log.i(TAG, "New video found: $videoTitle (ID: $videoId, Published: $currentVideoDate)")
+                            NotificationUtils.showNewVideoNotification(
+                                applicationContext,
+                                videoTitle,
+                                videoId
+                            )
+                            tempNotifiedIds.add(videoId)
+                            newVideosFoundThisRun = true
+
+                            if (currentBatchOverallNewestVideoDate == null || currentVideoDate.isAfter(currentBatchOverallNewestVideoDate)) {
+                                currentBatchOverallNewestVideoDate = currentVideoDate
                             }
                         }
 
-                        if (newVideosFound > 0) {
-                            prefs.edit().putStringSet(KEY_NOTIFIED_VIDEO_IDS, newNotifiedIds).apply()
-                            Log.d(TAG, "Updated notified video IDs. Total notified: ${newNotifiedIds.size}")
+                        if (newVideosFoundThisRun) {
+                            val editor = prefs.edit()
+                            editor.putStringSet(KEY_NOTIFIED_VIDEO_IDS, tempNotifiedIds)
+                            // Only update the last processed date if we actually found and processed a newer video in this batch
+                            if (currentBatchOverallNewestVideoDate != null && 
+                                (lastKnownNewestVideoDate == null || currentBatchOverallNewestVideoDate.isAfter(lastKnownNewestVideoDate))) {
+                                editor.putString(KEY_LAST_PROCESSED_NEWEST_PUBLISHED_AT, currentBatchOverallNewestVideoDate.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                                Log.d(TAG, "Updated last processed newest video date to: $currentBatchOverallNewestVideoDate")
+                            }
+                            editor.apply()
+                            Log.d(TAG, "Updated SharedPreferences. Total notified IDs: ${tempNotifiedIds.size}")
                         } else {
-                            Log.d(TAG, "No new videos found to notify.")
+                            Log.d(TAG, "No new videos found to notify in this run based on date and ID checks.")
                         }
                         Result.success()
                     } else {
