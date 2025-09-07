@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">Meowbah</string>
     <string name="video_widget_description">Displays a list of Meowbah videos and allows theme customization.</string>
+    <string name="video_thumbnail_content_description">Video thumbnail</string>
 </resources>

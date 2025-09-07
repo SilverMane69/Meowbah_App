@@ -1,33 +1,35 @@
 package com.kawaii.meowbah.ui.screens
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.speech.RecognizerIntent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DockedSearchBar
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -46,35 +48,56 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.kawaii.meowbah.ui.screens.videos.VideoItem
+import com.kawaii.meowbah.R
+import com.kawaii.meowbah.data.CachedVideoInfo
 import com.kawaii.meowbah.ui.screens.videos.VideosViewModel
-import com.kawaii.meowbah.ui.screens.videos.formatViewCount
+import java.io.File
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideosScreen(
     navController: NavController,
-    viewModel: VideosViewModel = viewModel(),
-    profileImageUri: String?
+    viewModel: VideosViewModel
 ) {
-    val videosState: List<VideoItem> by viewModel.videos.collectAsState()
+    android.util.Log.d("VideosScreen", "ViewModel instance: $viewModel")
+
+    val videosState: List<CachedVideoInfo> by viewModel.videos.collectAsState()
     val isLoading: Boolean by viewModel.isLoading.collectAsState()
     val errorMessage: String? by viewModel.error.collectAsState()
 
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchActive by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    // Define the YouTube channel URL - Assuming the channel ID is UC6GUr63276jX75XNn7M9uYw
+    val youtubeChannelUrl = "https://www.youtube.com/@Meowbahx"
+
+    val speechRecognizerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data: Intent? = result.data
+            val results: ArrayList<String>? = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            if (!results.isNullOrEmpty()) {
+                searchQuery = results[0]
+                searchActive = true
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
-        if (!searchActive && videosState.isEmpty()) {
+        if (!searchActive && videosState.isEmpty() && !isLoading) {
             viewModel.fetchVideos()
         }
     }
@@ -91,40 +114,27 @@ fun VideosScreen(
                 onSearch = { /* searchActive = false */ },
                 active = searchActive,
                 onActiveChange = { searchActive = it },
-                placeholder = { Text("Search your library") },
+                placeholder = { Text("Search Kawaii Videos") },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
                 trailingIcon = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { /* TODO: Implement voice search */ }) {
-                            Icon(Icons.Filled.Mic, contentDescription = "Voice search")
+                    IconButton(onClick = {
+                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now...")
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
-                        val imageModifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                        if (profileImageUri != null) {
-                            AsyncImage(
-                                model = profileImageUri,
-                                placeholder = rememberVectorPainter(image = Icons.Filled.AccountCircle),
-                                error = rememberVectorPainter(image = Icons.Filled.AccountCircle),
-                                contentDescription = "User profile",
-                                modifier = imageModifier,
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.AccountCircle,
-                                contentDescription = "User profile",
-                                modifier = imageModifier,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant // Optional: match placeholder tint
-                            )
+                        try {
+                            speechRecognizerLauncher.launch(intent)
+                        } catch (e: ActivityNotFoundException) {
+                            Toast.makeText(context, "Speech recognition is not available on this device.", Toast.LENGTH_LONG).show()
                         }
+                    }) {
+                        Icon(Icons.Filled.Mic, contentDescription = "Voice search")
                     }
                 }
             ) {
+                // Filter videos by title only
                 val filteredVideos = videosState.filter {
-                    it.snippet.title.contains(searchQuery, ignoreCase = true) ||
-                    it.snippet.channelTitle.contains(searchQuery, ignoreCase = true)
+                    it.title.contains(searchQuery, ignoreCase = true)
                 }
                 if (filteredVideos.isEmpty() && searchQuery.isNotEmpty()) {
                     Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
@@ -136,14 +146,15 @@ fun VideosScreen(
                     ) {
                         items(filteredVideos) { video ->
                             ListItem(
-                                headlineContent = { Text(video.snippet.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                supportingContent = { Text(video.snippet.channelTitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                headlineContent = { Text(video.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 leadingContent = {
                                     AsyncImage(
-                                        model = video.snippet.thumbnails.default.url,
-                                        contentDescription = "Thumbnail for ${video.snippet.title}",
+                                        model = video.cachedThumbnailPath?.let { File(it) } ?: R.drawable.ic_placeholder,
+                                        contentDescription = "Thumbnail for ${video.title}",
                                         modifier = Modifier.size(56.dp).clip(MaterialTheme.shapes.small),
-                                        contentScale = ContentScale.Crop
+                                        contentScale = ContentScale.Crop,
+                                        error = painterResource(id = R.drawable.ic_placeholder),
+                                        placeholder = painterResource(id = R.drawable.ic_placeholder)
                                     )
                                 },
                                 modifier = Modifier.clickable {
@@ -180,9 +191,24 @@ fun VideosScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = innerPadding.calculateBottomPadding() + 8.dp)
                 ) {
                     items(videosState) { video ->
-                        VideoListItem(video = video, onVideoClick = {
-                            navController.navigate("video_detail/${video.id}")
+                        VideoListItem(video = video, onVideoClick = { clickedVideo ->
+                            navController.navigate("video_detail/${clickedVideo.id}")
                         })
+                    }
+                    if (videosState.isNotEmpty()) { // Show button only if there are videos
+                        item {
+                            FilledTonalButton(
+                                onClick = {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(youtubeChannelUrl))
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp) // Add some padding around the button
+                            ) {
+                                Text("Show More on YouTube")
+                            }
+                        }
                     }
                 }
             }
@@ -191,7 +217,16 @@ fun VideosScreen(
 }
 
 @Composable
-fun VideoListItem(video: VideoItem, onVideoClick: (VideoItem) -> Unit) {
+fun VideoListItem(video: CachedVideoInfo, onVideoClick: (CachedVideoInfo) -> Unit) {
+    val publishedDateFormatted: String = video.publishedAt?.let { pubAtNonNull ->
+        try {
+            OffsetDateTime.parse(pubAtNonNull)
+                .format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(Locale.getDefault()))
+        } catch (e: Exception) {
+            pubAtNonNull
+        }
+    } ?: "Date unavailable"
+
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -206,10 +241,12 @@ fun VideoListItem(video: VideoItem, onVideoClick: (VideoItem) -> Unit) {
         Column {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(video.snippet.thumbnails.high.url ?: video.snippet.thumbnails.medium.url)
+                    .data(video.cachedThumbnailPath?.let { File(it) } ?: R.drawable.ic_placeholder)
                     .crossfade(true)
+                    .error(R.drawable.ic_placeholder)
+                    .placeholder(R.drawable.ic_placeholder)
                     .build(),
-                contentDescription = "Video thumbnail for ${video.snippet.title}",
+                contentDescription = "Video thumbnail for ${video.title}",
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f)
@@ -223,29 +260,19 @@ fun VideoListItem(video: VideoItem, onVideoClick: (VideoItem) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = video.snippet.title,
-                    style = MaterialTheme.typography.headlineSmall,
+                    text = video.title,
+                    style = MaterialTheme.typography.titleLarge,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                // Description Text composable removed from here
                 Text(
-                    text = video.snippet.channelTitle,
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = publishedDateFormatted,
+                    style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp) // Adjusted padding if necessary
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.PlayCircleOutline,
-                        contentDescription = "Views",
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "${formatViewCount(video.statistics.viewCount.toLongOrNull() ?: 0)} views",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
             }
         }
     }

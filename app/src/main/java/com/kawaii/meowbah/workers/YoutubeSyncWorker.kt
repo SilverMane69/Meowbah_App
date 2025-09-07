@@ -7,7 +7,8 @@ import androidx.work.WorkerParameters
 import com.kawaii.meowbah.BuildConfig
 import com.kawaii.meowbah.data.remote.YoutubeApiService
 import com.kawaii.meowbah.data.YoutubeRepository
-import com.kawaii.meowbah.ui.screens.videos.PlaceholderYoutubeVideoItem
+// Removed: import com.kawaii.meowbah.ui.screens.videos.PlaceholderYoutubeVideoItem
+import com.kawaii.meowbah.data.remote.YoutubeVideoItem // Added: Import for the DTO from data.remote
 import com.kawaii.meowbah.ui.activities.NotificationUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,15 +26,12 @@ class YoutubeSyncWorker(appContext: Context, workerParams: WorkerParameters) :
         private const val TAG = "YoutubeSyncWorker"
         private const val PREFS_NAME = "YoutubeSyncPrefs"
         private const val KEY_NOTIFIED_VIDEO_IDS = "notifiedVideoIds"
-        // Stores the ISO 8601 timestamp of the newest video for which a notification was sent
         private const val KEY_LAST_PROCESSED_NEWEST_PUBLISHED_AT = "lastProcessedNewestPublishedAt"
     }
 
     override suspend fun doWork(): Result {
         Log.d(TAG, "Starting Youtube sync work")
 
-        // This assumes YoutubeApiService.create() does not require TokenStorageService
-        // as the user previously rejected changes to its signature for this worker's context.
         val youtubeRepository = YoutubeRepository(YoutubeApiService.create())
         val prefs = applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         
@@ -54,17 +52,20 @@ class YoutubeSyncWorker(appContext: Context, workerParams: WorkerParameters) :
 
         return withContext(Dispatchers.IO) {
             try {
+                // The response.body() will be YoutubeVideoListResponse (from data.remote)
+                // which contains List<YoutubeVideoItem>
                 val response = youtubeRepository.getChannelVideos(
-                    part = "snippet",
-                    channelId = "UCzUnbX-2S2mMcfdd1jR2g-Q", // Meowbah's Channel ID from previous context
+                    part = "snippet,id", // Ensure id is fetched for videoId
+                    channelId = "UCzUnbX-2S2mMcfdd1jR2g-Q", 
                     apiKey = BuildConfig.YOUTUBE_API_KEY,
                     maxResults = 50, 
                     type = "video",
-                    order = "date" // Newest videos first
+                    order = "date" 
                 )
 
                 if (response.isSuccessful) {
-                    val videoItemList: List<PlaceholderYoutubeVideoItem>? = response.body()?.items
+                    // videoItemList is now List<YoutubeVideoItem>?
+                    val videoItemList: List<YoutubeVideoItem>? = response.body()?.items
 
                     if (videoItemList != null) {
                         Log.d(TAG, "Successfully fetched ${videoItemList.size} videos.")
@@ -72,10 +73,11 @@ class YoutubeSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                         var newVideosFoundThisRun = false
                         var currentBatchOverallNewestVideoDate = lastKnownNewestVideoDate
 
-                        for (videoItem: PlaceholderYoutubeVideoItem in videoItemList) {
-                            val videoId = videoItem.id?.videoId
-                            val videoTitle = videoItem.snippet?.title
-                            val videoPublishedAtString = videoItem.snippet?.publishedAt
+                        // videoItem is now com.kawaii.meowbah.data.remote.YoutubeVideoItem
+                        for (videoItem: YoutubeVideoItem in videoItemList) {
+                            val videoId = videoItem.id?.videoId // Access from YoutubeId
+                            val videoTitle = videoItem.snippet?.title // Access from YoutubeSnippet
+                            val videoPublishedAtString = videoItem.snippet?.publishedAt // Access from YoutubeSnippet
 
                             if (videoId == null || videoTitle == null || videoPublishedAtString == null) {
                                 Log.w(TAG, "Skipping video with missing ID, title, or publishedAt: $videoItem")
@@ -103,7 +105,8 @@ class YoutubeSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                             NotificationUtils.showNewVideoNotification(
                                 applicationContext,
                                 videoTitle,
-                                videoId
+                                videoId,
+                                null // Passing null for thumbnailPath
                             )
                             tempNotifiedIds.add(videoId)
                             newVideosFoundThisRun = true
@@ -116,7 +119,6 @@ class YoutubeSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                         if (newVideosFoundThisRun) {
                             val editor = prefs.edit()
                             editor.putStringSet(KEY_NOTIFIED_VIDEO_IDS, tempNotifiedIds)
-                            // Only update the last processed date if we actually found and processed a newer video in this batch
                             if (currentBatchOverallNewestVideoDate != null && 
                                 (lastKnownNewestVideoDate == null || currentBatchOverallNewestVideoDate.isAfter(lastKnownNewestVideoDate))) {
                                 editor.putString(KEY_LAST_PROCESSED_NEWEST_PUBLISHED_AT, currentBatchOverallNewestVideoDate.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))

@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kawaii.meowbah.BuildConfig
 import com.kawaii.meowbah.data.remote.YoutubeApiService
+import com.kawaii.meowbah.data.CachedVideoInfo
+import com.kawaii.meowbah.data.remote.YoutubeVideoListResponse // Added import for the DTO from data.remote
+// Removed Placeholder DTO imports as they will be deleted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -13,58 +16,14 @@ import android.util.Log
 import org.json.JSONObject
 import retrofit2.HttpException
 import java.io.IOException
-import retrofit2.Response // Added import for Retrofit Response
+import retrofit2.Response
 
-// --- Placeholder Data Classes for API Interaction ---
-
-data class PlaceholderId(
-    val kind: String?,
-    val videoId: String?
-)
-
-data class PlaceholderSnippet(
-    val publishedAt: String?, // Added this line
-    val title: String?,
-    val channelTitle: String?,
-    val description: String?,
-    val thumbnails: PlaceholderThumbnails?
-)
-
-data class PlaceholderThumbnails(
-    val default: PlaceholderThumbnail?,
-    val medium: PlaceholderThumbnail?,
-    val high: PlaceholderThumbnail?
-)
-
-data class PlaceholderThumbnail(
-    val url: String?
-)
-
-data class PlaceholderStatistics(
-    val viewCount: String?
-)
-
-data class PlaceholderContentDetails(
-    val duration: String?
-)
-
-data class PlaceholderYoutubeVideoItem(
-    val id: PlaceholderId?,
-    val snippet: PlaceholderSnippet?,
-    val statistics: PlaceholderStatistics?
-)
-
-data class PlaceholderYoutubeVideoListResponse(
-    val items: List<PlaceholderYoutubeVideoItem>
-)
-
-// --- End of Placeholder Data Classes ---
-
+// --- Local Placeholder Data Classes are removed as we now use DTOs from data.remote ---
 
 class VideosViewModel : ViewModel() {
 
-    private val _videos = MutableStateFlow<List<VideoItem>>(emptyList())
-    val videos: StateFlow<List<VideoItem>> = _videos
+    private val _videos = MutableStateFlow<List<CachedVideoInfo>>(emptyList())
+    val videos: StateFlow<List<CachedVideoInfo>> = _videos
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
@@ -80,8 +39,8 @@ class VideosViewModel : ViewModel() {
             .create(YoutubeApiService::class.java)
     }
 
-    private val apiKey = BuildConfig.YOUTUBE_API_KEY 
-    private val channelId = "UCNytjdD5-KZInxjVeWV_qQw" // TODO: Replace with actual Meowbah channel ID if different
+    private val apiKey = BuildConfig.YOUTUBE_API_KEY
+    private val channelId = "UCzUnbX-2S2mMcfdd1jR2g-Q" // Meowbah's Channel ID
 
     fun fetchVideos() {
         viewModelScope.launch {
@@ -89,45 +48,35 @@ class VideosViewModel : ViewModel() {
             _error.value = null
             val requestDescription = "youtubeApiService.getChannelVideos(channelId=$channelId)"
             try {
-                val apiResponse: Response<PlaceholderYoutubeVideoListResponse> = youtubeApiService.getChannelVideos(
-                    part = "snippet,id", // Corrected: ensure 'id' is part of 'part' if PlaceholderId needs it.
+                // Using YoutubeVideoListResponse from data.remote package
+                val apiResponse: Response<YoutubeVideoListResponse> = youtubeApiService.getChannelVideos(
+                    part = "snippet,id", 
                     channelId = channelId,
                     apiKey = apiKey,
-                    maxResults = 20,
+                    maxResults = 20, 
                     type = "video",
                     order = "date"
                 )
 
                 if (apiResponse.isSuccessful) {
-                    val placeholderData = apiResponse.body()
-                    if (placeholderData != null) {
-                        _videos.value = placeholderData.items.map { apiItem ->
-                            VideoItem(
-                                id = apiItem.id?.videoId ?: "",
-                                snippet = VideoSnippet(
-                                    title = apiItem.snippet?.title ?: "No Title",
-                                    channelTitle = apiItem.snippet?.channelTitle ?: "No Channel",
-                                    localized = LocalizedSnippet(
-                                        title = apiItem.snippet?.title ?: "No Title",
-                                        description = apiItem.snippet?.description ?: ""
-                                    ),
-                                    thumbnails = Thumbnails(
-                                        default = Thumbnail(url = apiItem.snippet?.thumbnails?.default?.url ?: "", width = 120, height = 90),
-                                        medium = Thumbnail(
-                                            url = apiItem.snippet?.thumbnails?.medium?.url ?: "",
-                                            width = 320,
-                                            height = 180
-                                        ),
-                                        high = Thumbnail(url = apiItem.snippet?.thumbnails?.high?.url ?: "", width = 480, height = 360)
-                                    )
-                                ),
-                                statistics = VideoStatistics(
-                                    viewCount = apiItem.statistics?.viewCount ?: "0"
-                                )
-                                // Assuming ContentDetails like duration are not directly mapped here or fetched separately
+                    val remoteData = apiResponse.body()
+                    if (remoteData != null) {
+                        // apiItem is now com.kawaii.meowbah.data.remote.YoutubeVideoItem
+                        _videos.value = remoteData.items.mapNotNull { apiItem ->
+                            val videoId = apiItem.id?.videoId // Accessing videoId from YoutubeId
+                            if (videoId == null) {
+                                Log.w("VideosViewModel", "Skipping video item with null ID: $apiItem")
+                                return@mapNotNull null 
+                            }
+                            CachedVideoInfo(
+                                id = videoId,
+                                title = apiItem.snippet?.title ?: "No Title", // Accessing from YoutubeSnippet
+                                description = apiItem.snippet?.description, // Accessing from YoutubeSnippet
+                                publishedAt = apiItem.snippet?.publishedAt, // Accessing from YoutubeSnippet
+                                cachedThumbnailPath = null 
                             )
                         }
-                        Log.d("VideosViewModel", "Successfully fetched videos for $requestDescription")
+                        Log.d("VideosViewModel", "Successfully fetched and mapped videos for $requestDescription. Count: ${_videos.value.size}")
                     } else {
                         Log.e("VideosViewModel", "API call successful but response body is null for $requestDescription")
                         _error.value = "Failed to load videos: Empty response from server."
@@ -154,7 +103,7 @@ class VideosViewModel : ViewModel() {
                     _videos.value = emptyList()
                 }
 
-            } catch (e: HttpException) { // Catches other HTTP-related issues not covered by Response.isSuccessful
+            } catch (e: HttpException) { 
                 val errorBody = e.response()?.errorBody()?.string() ?: "No error body"
                 var detailedMessage = "HTTP ${e.code()}: ${e.message()}"
                 try {

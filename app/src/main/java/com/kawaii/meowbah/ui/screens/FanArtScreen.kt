@@ -99,7 +99,7 @@ fun FanArtScreen(navController: NavController) {
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = {
- TODO: Handle Add Fan Art action
+    TODO("Handle Add Fan Art action")
  },
                 icon = { Icon(Icons.Filled.Add, contentDescription = "Add new fan art") },
                 text = { Text("Add New Fan Art") },

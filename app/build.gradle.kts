@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    id("kotlin-parcelize") // Added this line
 }
 
 // Load local.properties
@@ -32,6 +33,13 @@ android {
             .replace("\\", "\\\\") // Replace \ with \\
             .replace("\"", "\\\"") // Replace " with \"
         buildConfigField("String", "YOUTUBE_API_KEY", "\"$escapedYoutubeApiKey\"")
+
+        // Read Channel ID from local.properties and add to BuildConfig
+        val youtubeChannelIdFromProperties = properties.getProperty("YOUTUBE_CHANNEL_ID") ?: ""
+        val escapedYoutubeChannelId = youtubeChannelIdFromProperties
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+        buildConfigField("String", "YOUTUBE_CHANNEL_ID", "\"$escapedYoutubeChannelId\"")
     }
 
     buildTypes {
@@ -69,6 +77,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation("androidx.appcompat:appcompat:1.7.1") // Added AppCompat
+    implementation("com.google.android.material:material:1.13.0") // Added Material Components for Android
     
     // Material 3 and Adaptive Dependencies
     implementation("androidx.compose.material3:material3") 
