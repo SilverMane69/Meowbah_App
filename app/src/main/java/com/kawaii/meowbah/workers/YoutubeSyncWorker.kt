@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.kawaii.meowbah.MainActivity // Added for accessing PREFS_NAME and KEY_VIDEO_NOTIFICATIONS_ENABLED
 import com.kawaii.meowbah.ui.activities.NotificationUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -13,7 +14,7 @@ import org.xmlpull.v1.XmlPullParserFactory
 import java.io.IOException
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
-import java.net.MalformedURLException // Added this import
+import java.net.MalformedURLException
 import java.net.URL
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -25,7 +26,8 @@ class YoutubeSyncWorker(appContext: Context, workerParams: WorkerParameters) :
     companion object {
         const val WORK_NAME = "YoutubeSyncWorker"
         private const val TAG = "YoutubeSyncWorker"
-        private const val PREFS_NAME = "YoutubeSyncPrefs"
+        // PREFS_NAME for this worker, distinct from MainActivity's PREFS_NAME
+        private const val RSS_WORKER_PREFS_NAME = "YoutubeSyncPrefs" 
         private const val KEY_NOTIFIED_VIDEO_IDS = "notifiedVideoIds"
         private const val KEY_LAST_PROCESSED_NEWEST_PUBLISHED_AT = "lastProcessedNewestPublishedAt"
         private const val RSS_FEED_URL = "https://www.youtube.com/feeds/videos.xml?channel_id=UCNytjdD5-KZInxjVeWV_qQw" // CORRECTED Channel ID
@@ -42,9 +44,19 @@ class YoutubeSyncWorker(appContext: Context, workerParams: WorkerParameters) :
     override suspend fun doWork(): Result {
         Log.d(TAG, "Starting RSS Youtube sync work")
 
-        val prefs = applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val notifiedVideoIds = prefs.getStringSet(KEY_NOTIFIED_VIDEO_IDS, mutableSetOf()) ?: mutableSetOf()
-        val lastProcessedNewestPublishedAtString = prefs.getString(KEY_LAST_PROCESSED_NEWEST_PUBLISHED_AT, null)
+        // Get preferences specific to this worker (for tracking notified videos)
+        val workerPrefs = applicationContext.getSharedPreferences(RSS_WORKER_PREFS_NAME, Context.MODE_PRIVATE)
+        val notifiedVideoIds = workerPrefs.getStringSet(KEY_NOTIFIED_VIDEO_IDS, mutableSetOf()) ?: mutableSetOf()
+        val lastProcessedNewestPublishedAtString = workerPrefs.getString(KEY_LAST_PROCESSED_NEWEST_PUBLISHED_AT, null)
+
+        // Get main app preferences to check if video notifications are enabled by the user
+        val mainAppPrefs = applicationContext.getSharedPreferences(MainActivity.PREFS_NAME, Context.MODE_PRIVATE)
+        val videoNotificationsEnabled = mainAppPrefs.getBoolean(MainActivity.KEY_VIDEO_NOTIFICATIONS_ENABLED, true)
+        Log.d(TAG, "Video notifications enabled setting: $videoNotificationsEnabled")
+
+        // Ensure video notification channel is created before attempting to notify
+        // This is safe to call multiple times; system handles it.
+        NotificationUtils.createNotificationChannel(applicationContext)
 
         var lastKnownNewestVideoDate: OffsetDateTime? = null
         if (lastProcessedNewestPublishedAtString != null) {
@@ -94,14 +106,21 @@ class YoutubeSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                     }
 
                     Log.i(TAG, "New video found via RSS: $videoTitle (ID: $videoId, Published: $currentVideoDate)")
-                    NotificationUtils.showNewVideoNotification(
-                        applicationContext,
-                        videoTitle,
-                        videoId,
-                        null 
-                    )
+                    
+                    if (videoNotificationsEnabled) {
+                        NotificationUtils.showNewVideoNotification(
+                            applicationContext,
+                            videoTitle,
+                            videoId,
+                            null 
+                        )
+                        Log.d(TAG, "Sent notification for new video: $videoTitle")
+                    } else {
+                        Log.d(TAG, "Video notifications are disabled in settings. Skipping notification for $videoTitle.")
+                    }
+                    
                     tempNotifiedIds.add(videoId)
-                    newVideosFoundThisRun = true
+                    newVideosFoundThisRun = true // Still mark as found for tracking, even if not notified
 
                     if (currentBatchOverallNewestVideoDate == null || currentVideoDate.isAfter(currentBatchOverallNewestVideoDate)) {
                         currentBatchOverallNewestVideoDate = currentVideoDate
@@ -109,7 +128,7 @@ class YoutubeSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                 }
 
                 if (newVideosFoundThisRun) {
-                    val editor = prefs.edit()
+                    val editor = workerPrefs.edit() // Save to worker-specific prefs
                     editor.putStringSet(KEY_NOTIFIED_VIDEO_IDS, tempNotifiedIds)
                     if (currentBatchOverallNewestVideoDate != null &&
                         (lastKnownNewestVideoDate == null || currentBatchOverallNewestVideoDate.isAfter(lastKnownNewestVideoDate))) {
@@ -117,9 +136,9 @@ class YoutubeSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                         Log.d(TAG, "Updated last processed newest video date to: $currentBatchOverallNewestVideoDate")
                     }
                     editor.apply()
-                    Log.d(TAG, "Updated SharedPreferences. Total notified IDs: ${tempNotifiedIds.size}")
+                    Log.d(TAG, "Updated worker SharedPreferences. Total notified IDs: ${tempNotifiedIds.size}")
                 } else {
-                    Log.d(TAG, "No new videos found to notify in this run based on RSS date and ID checks.")
+                    Log.d(TAG, "No new videos found to process (notify or just track) in this run based on RSS date and ID checks.")
                 }
                 Result.success()
 

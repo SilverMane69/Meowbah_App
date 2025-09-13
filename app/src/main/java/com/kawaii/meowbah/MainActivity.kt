@@ -2,6 +2,7 @@ package com.kawaii.meowbah
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.Notification // Required for Notification.VISIBILITY_PUBLIC
 import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
@@ -109,16 +110,17 @@ val bottomNavItems = listOf(
 class MainActivity : ComponentActivity() {
 
     companion object {
-        const val PREFS_NAME = "MeowbahAppPreferences" // Made public for wider access
+        const val PREFS_NAME = "MeowbahAppPreferences"
         private const val KEY_SELECTED_THEME = "selectedTheme"
         private const val KEY_LOGIN_MUSIC_ENABLED = "loginMusicEnabled"
         private const val KEY_WELCOME_DIALOG_SHOWN = "welcomeDialogShown"
-        const val KEY_MEOWTALK_ENABLED = "meowTalkEnabled" // Made public
-        const val KEY_MEOWTALK_INTERVAL_MINUTES = "meowTalkIntervalMinutes" // Made public
-        const val KEY_MEOWTALK_SCHEDULING_TYPE = "meowTalkSchedulingType" // Made public
-        const val KEY_MEOWTALK_SPECIFIC_HOUR = "meowTalkSpecificHour" // Made public
-        const val KEY_MEOWTALK_SPECIFIC_MINUTE = "meowTalkSpecificMinute" // Made public
-        const val KEY_MEOWTALK_CURRENT_PHRASE = "meowTalkCurrentPhrase" // Added and made public
+        const val KEY_MEOWTALK_ENABLED = "meowTalkEnabled"
+        const val KEY_MEOWTALK_INTERVAL_MINUTES = "meowTalkIntervalMinutes"
+        const val KEY_MEOWTALK_SCHEDULING_TYPE = "meowTalkSchedulingType"
+        const val KEY_MEOWTALK_SPECIFIC_HOUR = "meowTalkSpecificHour"
+        const val KEY_MEOWTALK_SPECIFIC_MINUTE = "meowTalkSpecificMinute"
+        const val KEY_MEOWTALK_CURRENT_PHRASE = "meowTalkCurrentPhrase"
+        const val KEY_VIDEO_NOTIFICATIONS_ENABLED = "videoNotificationsEnabled" // New Key
         private const val TAG = "MainActivity"
     }
 
@@ -208,17 +210,31 @@ class MainActivity : ComponentActivity() {
         val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return sharedPrefs.getInt(KEY_MEOWTALK_SPECIFIC_MINUTE, 0)
     }
+    
+    private fun saveVideoNotificationsEnabledPreference(enabled: Boolean) { // New function
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        with(sharedPrefs.edit()) {
+            putBoolean(KEY_VIDEO_NOTIFICATIONS_ENABLED, enabled)
+            apply()
+        }
+    }
+
+    private fun loadVideoNotificationsEnabledPreference(): Boolean { // New function
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return sharedPrefs.getBoolean(KEY_VIDEO_NOTIFICATIONS_ENABLED, true) // Default to true
+    }
 
     private fun createMeowTalkNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val importance = NotificationManager.IMPORTANCE_DEFAULT
             val channel = NotificationChannel(MEOWTALK_NOTIFICATION_CHANNEL_ID, MEOWTALK_NOTIFICATION_CHANNEL_NAME, importance).apply {
                 description = "Notifications for random MeowTalk phrases"
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             val notificationManager:
                 NotificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
-            Log.d(TAG, "MeowTalk Notification Channel created.")
+            Log.d(TAG, "MeowTalk Notification Channel created with public lockscreen visibility.")
         }
     }
 
@@ -244,6 +260,7 @@ class MainActivity : ComponentActivity() {
 
         handleIntentForNavigation(intent) 
         createMeowTalkNotificationChannel()
+        // Video notification channel is created in NotificationUtils when first needed
         scheduleYoutubeSync()
 
         val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -311,6 +328,12 @@ class MainActivity : ComponentActivity() {
                 meowTalkSpecificMinute = minute
                 if (isMeowTalkEnabled) meowTalkScheduler.schedule(loadMeowTalkIntervalPreference(), loadMeowTalkSchedulingTypePreference(), hour, minute)
             } }
+            
+            var isVideoNotificationsEnabled by rememberSaveable { mutableStateOf(loadVideoNotificationsEnabledPreference()) } // New state
+            val onVideoNotificationsEnabledChange: (Boolean) -> Unit = remember { { enabled -> // New lambda
+                saveVideoNotificationsEnabledPreference(enabled)
+                isVideoNotificationsEnabled = enabled
+            } }
 
             var showWelcomeDialog by rememberSaveable { mutableStateOf(!welcomeDialogAlreadyShown) }
             val onWelcomeDialogDismissed: () -> Unit = {
@@ -340,6 +363,8 @@ class MainActivity : ComponentActivity() {
                         meowTalkSpecificHour = meowTalkSpecificHour,
                         meowTalkSpecificMinute = meowTalkSpecificMinute,
                         onMeowTalkSpecificTimeChange = onMeowTalkSpecificTimeChange,
+                        isVideoNotificationsEnabled = isVideoNotificationsEnabled, // Pass new state
+                        onVideoNotificationsEnabledChange = onVideoNotificationsEnabledChange, // Pass new lambda
                         getPendingVideoId = { getPendingVideoIdFromIntent(intent) },
                         showWelcomeDialog = showWelcomeDialog,
                         onWelcomeDialogDismissed = onWelcomeDialogDismissed,
@@ -393,6 +418,8 @@ fun AppNavigation(
     meowTalkSpecificHour: Int,
     meowTalkSpecificMinute: Int,
     onMeowTalkSpecificTimeChange: (Int, Int) -> Unit,
+    isVideoNotificationsEnabled: Boolean, // New parameter
+    onVideoNotificationsEnabledChange: (Boolean) -> Unit, // New parameter
     getPendingVideoId: () -> String?,
     showWelcomeDialog: Boolean,
     onWelcomeDialogDismissed: () -> Unit,
@@ -437,6 +464,8 @@ fun AppNavigation(
                 meowTalkSpecificHour = meowTalkSpecificHour,
                 meowTalkSpecificMinute = meowTalkSpecificMinute,
                 onMeowTalkSpecificTimeChange = onMeowTalkSpecificTimeChange,
+                isVideoNotificationsEnabled = isVideoNotificationsEnabled, // Pass down
+                onVideoNotificationsEnabledChange = onVideoNotificationsEnabledChange, // Pass down
                 getPendingVideoId = getPendingVideoId,
                 windowSizeClass = windowSizeClass
             )
@@ -498,6 +527,8 @@ fun MainScreen(
     meowTalkSpecificHour: Int,
     meowTalkSpecificMinute: Int,
     onMeowTalkSpecificTimeChange: (Int, Int) -> Unit,
+    isVideoNotificationsEnabled: Boolean, // New parameter
+    onVideoNotificationsEnabledChange: (Boolean) -> Unit, // New parameter
     getPendingVideoId: () -> String?,
     windowSizeClass: WindowWidthSizeClass
 ) {
@@ -673,7 +704,9 @@ fun MainScreen(
                         onMeowTalkSchedulingTypeChange = onMeowTalkSchedulingTypeChange,
                         meowTalkSpecificHour = meowTalkSpecificHour,
                         meowTalkSpecificMinute = meowTalkSpecificMinute,
-                        onMeowTalkSpecificTimeChange = onMeowTalkSpecificTimeChange
+                        onMeowTalkSpecificTimeChange = onMeowTalkSpecificTimeChange,
+                        isVideoNotificationsEnabled = isVideoNotificationsEnabled, // Pass to SettingsScreen
+                        onVideoNotificationsEnabledChange = onVideoNotificationsEnabledChange // Pass to SettingsScreen
                     )
                 }
                 composable(BottomNavItem.Art.route) {

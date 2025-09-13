@@ -26,6 +26,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.MusicOff
+import androidx.compose.material.icons.filled.Notifications // For Video Notifications Icon
+import androidx.compose.material.icons.filled.NotificationsOff // For Video Notifications Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -97,7 +99,9 @@ fun SettingsScreen(
     onMeowTalkSchedulingTypeChange: (String) -> Unit,
     meowTalkSpecificHour: Int,
     meowTalkSpecificMinute: Int,
-    onMeowTalkSpecificTimeChange: (hour: Int, minute: Int) -> Unit
+    onMeowTalkSpecificTimeChange: (hour: Int, minute: Int) -> Unit,
+    isVideoNotificationsEnabled: Boolean, 
+    onVideoNotificationsEnabledChange: (Boolean) -> Unit
 ) {
     var showThemeDialog by remember { mutableStateOf(false) }
     var showTimePickerDialog by remember { mutableStateOf(false) }
@@ -111,12 +115,10 @@ fun SettingsScreen(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { isGranted ->
             if (isGranted) {
-                onMeowTalkEnabledChange(true)
-                showPermissionRationale = false // Hide rationale if permission is now granted
+                onMeowTalkEnabledChange(true) 
+                showPermissionRationale = false 
             } else {
                 onMeowTalkEnabledChange(false)
-                // Only show rationale if permission is explicitly denied by user FROM THE DIALOG
-                // and they try to enable it again. The visibility is handled by check below.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     showPermissionRationale = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
                 }
@@ -190,6 +192,32 @@ fun SettingsScreen(
                     )
                 }
             }
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(2.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Enable Video Notifications", style = MaterialTheme.typography.titleMedium)
+                    Switch(
+                        checked = isVideoNotificationsEnabled,
+                        onCheckedChange = onVideoNotificationsEnabledChange,
+                        thumbContent = {
+                            if (isVideoNotificationsEnabled) {
+                                Icon(Icons.Filled.Notifications, contentDescription = "Video Notifications Enabled")
+                            } else {
+                                Icon(Icons.Filled.NotificationsOff, contentDescription = "Video Notifications Disabled")
+                            }
+                        }
+                    )
+                }
+            }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -223,18 +251,16 @@ fun SettingsScreen(
                                     }
                                 } else {
                                     onMeowTalkEnabledChange(false)
-                                    // No need to show rationale when user explicitly disables
                                     showPermissionRationale = false
                                 }
                             }
                         )
                     }
 
-                    // Determine if rationale should be shown based on current state (not just after launcher result)
                     val shouldShowRationaleNow = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         !isMeowTalkEnabled && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
                     } else {
-                        false // Not relevant for older versions
+                        false
                     }
 
                     AnimatedVisibility(visible = shouldShowRationaleNow) {
@@ -393,7 +419,7 @@ fun SettingsScreen(
                 showTimePickerDialog = false
             },
             content = {
-                TimePicker(state = timePickerState, modifier = Modifier.padding(16.dp))
+                TimePicker(state = timePickerState) // MODIFIED: Removed Modifier.padding(16.dp)
             }
         )
     }

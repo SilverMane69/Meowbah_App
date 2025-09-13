@@ -66,6 +66,7 @@ class MeowTalkAlarmReceiver : BroadcastReceiver() {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingLaunchIntent)
             .setAutoCancel(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // ADDED THIS LINE
             .build()
 
         try {
@@ -85,6 +86,8 @@ class MeowTalkAlarmReceiver : BroadcastReceiver() {
 
         } catch (e: SecurityException) {
             Log.e(TAG, "SecurityException: Could not post notification.", e)
+            // Consider prompting user to grant POST_NOTIFICATIONS permission if this occurs on Android 13+
+            // Or guide them to app settings.
         } catch (e: Exception) {
             Log.e(TAG, "Error posting MeowTalk notification or emitting event", e)
         }

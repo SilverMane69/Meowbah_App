@@ -1,5 +1,6 @@
 package com.kawaii.meowbah.ui.activities
 
+import android.app.Notification // Required for Notification.VISIBILITY_PUBLIC
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -32,10 +33,12 @@ object NotificationUtils {
             val importance = NotificationManager.IMPORTANCE_DEFAULT
             val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, importance).apply {
                 description = CHANNEL_DESCRIPTION
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             val notificationManager: NotificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
+            Log.d(TAG, "Video Notification Channel created with public lockscreen visibility.")
         }
     }
 
@@ -52,7 +55,7 @@ object NotificationUtils {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val smallIconResId = android.R.drawable.ic_menu_camera 
+        val smallIconResId = R.drawable.ic_notification_meowbah_monochrome // MODIFIED LINE
         var largeIconBitmap: Bitmap? = null
         var videoThumbnailBitmap: Bitmap? = null
 
@@ -83,6 +86,7 @@ object NotificationUtils {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
         // Apply BigPictureStyle if video thumbnail was successfully loaded
         videoThumbnailBitmap?.let {
