@@ -2,4 +2,10 @@
     <string name="app_name">Meowbah</string>
     <string name="video_widget_description">Displays a list of Meowbah videos and allows theme customization.</string>
     <string name="video_thumbnail_content_description">Video thumbnail</string>
+    <string name="title_activity_wear">wear</string>
+    <!--
+    This string is used for square devices and overridden by hello_world in
+    values-round/strings.xml for round devices.
+    -->
+    <string name="hello_world">From the Square world,\nHello, %1$s!</string>
 </resources>

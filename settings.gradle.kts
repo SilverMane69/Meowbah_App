@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Meowbah"
 include(":app")
+// include(":wear") // REMOVED THIS LINE

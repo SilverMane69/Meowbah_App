@@ -55,6 +55,7 @@ android {
 }
 
 dependencies {
+    // wearApp(project(":wear")) // REMOVED THIS LINE
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -65,6 +66,8 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation("androidx.appcompat:appcompat:1.7.1") // Added AppCompat
     implementation("com.google.android.material:material:1.13.0") // Added Material Components for Android
+    // implementation("com.google.android.gms:play-services-wearable:18.1.0") // REMOVED THIS LINE
+    // implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3") // REMOVED THIS LINE
     
     // Material 3 and Adaptive Dependencies
     implementation("androidx.compose.material3:material3") 
@@ -76,14 +79,15 @@ dependencies {
 
     implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.material.icons.extended)
-    // implementation(libs.retrofit) // Removed
-    // implementation(libs.converter.gson) // Removed
-    // implementation("com.squareup.okhttp3:logging-interceptor:4.12.0") // Removed
     implementation(libs.coil.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.work.runtime.ktx) // Added WorkManager
-    // implementation("com.google.android.gms:play-services-auth:21.4.0") // Removed
     implementation("androidx.security:security-crypto:1.1.0") // Added for EncryptedSharedPreferences
+    implementation("androidx.compose.material3:material3-window-size-class:1.2.1")
+    implementation(libs.androidx.compose.material)
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.wear.tooling.preview)
+    implementation(libs.androidx.core.splashscreen)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -93,4 +97,3 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }
-
