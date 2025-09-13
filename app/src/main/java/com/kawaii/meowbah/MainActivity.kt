@@ -1,8 +1,11 @@
 package com.kawaii.meowbah
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -11,19 +14,30 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FormatPaint
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.outlined.FormatPaint
+import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -36,11 +50,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-// import androidx.compose.ui.unit.dp // Not used directly in this file after removals
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -54,20 +68,24 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-// import com.kawaii.meowbah.data.AuthRepository // Removed
-// import com.kawaii.meowbah.data.TokenStorageService // Removed
-// import com.kawaii.meowbah.data.remote.AuthApiService // Removed
 import com.kawaii.meowbah.ui.dialogs.WelcomeDialog
+import com.kawaii.meowbah.ui.notifications.MeowTalkAlarmReceiver
+import com.kawaii.meowbah.ui.notifications.MeowTalkScheduler
+import com.kawaii.meowbah.ui.screens.FanArtScreen
 import com.kawaii.meowbah.ui.screens.SettingsScreen
+import com.kawaii.meowbah.ui.screens.MeowTalkScreen
 import com.kawaii.meowbah.ui.screens.VideosScreen
 import com.kawaii.meowbah.ui.screens.videodetail.VideoDetailScreen
 import com.kawaii.meowbah.ui.screens.videos.VideosViewModel
 import com.kawaii.meowbah.ui.theme.AvailableTheme
 import com.kawaii.meowbah.ui.theme.MeowbahTheme
 import com.kawaii.meowbah.ui.theme.allThemes
-// import com.kawaii.meowbah.workers.RssSyncWorker // Removed
 import com.kawaii.meowbah.workers.YoutubeSyncWorker
+import java.util.Calendar
 import java.util.concurrent.TimeUnit
+
+const val MEOWTALK_NOTIFICATION_CHANNEL_ID = "meowtalk_channel"
+const val MEOWTALK_NOTIFICATION_CHANNEL_NAME = "MeowTalk Notifications"
 
 sealed class BottomNavItem(
     val route: String,
@@ -77,22 +95,34 @@ sealed class BottomNavItem(
 ) {
     object Videos : BottomNavItem("videos_tab", "Videos", Icons.Filled.Videocam, Icons.Outlined.Videocam)
     object Settings : BottomNavItem("settings_tab", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
+    object Art : BottomNavItem(route = "art_tab", label = "Art", Icons.Filled.FormatPaint, outlinedIcon = Icons.Outlined.FormatPaint)
+    object MeowTalk : BottomNavItem(route = "meowtalk_tab", label = "MeowTalk", Icons.Filled.FormatQuote, outlinedIcon = Icons.Outlined.FormatQuote)
 }
 
 val bottomNavItems = listOf(
     BottomNavItem.Videos,
+    BottomNavItem.Art,
+    BottomNavItem.MeowTalk,
     BottomNavItem.Settings
 )
 
 class MainActivity : ComponentActivity() {
 
     companion object {
-        private const val PREFS_NAME = "MeowbahAppPreferences"
+        const val PREFS_NAME = "MeowbahAppPreferences" // Made public for wider access
         private const val KEY_SELECTED_THEME = "selectedTheme"
         private const val KEY_LOGIN_MUSIC_ENABLED = "loginMusicEnabled"
         private const val KEY_WELCOME_DIALOG_SHOWN = "welcomeDialogShown"
+        const val KEY_MEOWTALK_ENABLED = "meowTalkEnabled" // Made public
+        const val KEY_MEOWTALK_INTERVAL_MINUTES = "meowTalkIntervalMinutes" // Made public
+        const val KEY_MEOWTALK_SCHEDULING_TYPE = "meowTalkSchedulingType" // Made public
+        const val KEY_MEOWTALK_SPECIFIC_HOUR = "meowTalkSpecificHour" // Made public
+        const val KEY_MEOWTALK_SPECIFIC_MINUTE = "meowTalkSpecificMinute" // Made public
+        const val KEY_MEOWTALK_CURRENT_PHRASE = "meowTalkCurrentPhrase" // Added and made public
         private const val TAG = "MainActivity"
     }
+
+    private var initialScreenRouteFromIntent by mutableStateOf<String?>(null)
 
     private fun saveThemePreference(theme: AvailableTheme) {
         val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -121,20 +151,104 @@ class MainActivity : ComponentActivity() {
         return sharedPrefs.getBoolean(KEY_LOGIN_MUSIC_ENABLED, true)
     }
 
-    override fun onNewIntent(intent: Intent?) {
-        super.onNewIntent(intent)
-        setIntent(intent)
+    private fun saveMeowTalkEnabledPreference(enabled: Boolean) {
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        with(sharedPrefs.edit()) {
+            putBoolean(KEY_MEOWTALK_ENABLED, enabled)
+            apply()
+        }
     }
 
+    private fun loadMeowTalkEnabledPreference(): Boolean {
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return sharedPrefs.getBoolean(KEY_MEOWTALK_ENABLED, false)
+    }
+
+    private fun saveMeowTalkIntervalPreference(intervalMinutes: Int) {
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        with(sharedPrefs.edit()) {
+            putInt(KEY_MEOWTALK_INTERVAL_MINUTES, intervalMinutes)
+            apply()
+        }
+    }
+
+    private fun loadMeowTalkIntervalPreference(): Int {
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return sharedPrefs.getInt(KEY_MEOWTALK_INTERVAL_MINUTES, 30)
+    }
+
+    private fun saveMeowTalkSchedulingTypePreference(type: String) {
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        with(sharedPrefs.edit()) {
+            putString(KEY_MEOWTALK_SCHEDULING_TYPE, type)
+            apply()
+        }
+    }
+
+    private fun loadMeowTalkSchedulingTypePreference(): String {
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return sharedPrefs.getString(KEY_MEOWTALK_SCHEDULING_TYPE, "interval") ?: "interval"
+    }
+
+    private fun saveMeowTalkSpecificTimePreference(hour: Int, minute: Int) {
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        with(sharedPrefs.edit()) {
+            putInt(KEY_MEOWTALK_SPECIFIC_HOUR, hour)
+            putInt(KEY_MEOWTALK_SPECIFIC_MINUTE, minute)
+            apply()
+        }
+    }
+
+    private fun loadMeowTalkSpecificHourPreference(): Int {
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return sharedPrefs.getInt(KEY_MEOWTALK_SPECIFIC_HOUR, 12)
+    }
+
+    private fun loadMeowTalkSpecificMinutePreference(): Int {
+        val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return sharedPrefs.getInt(KEY_MEOWTALK_SPECIFIC_MINUTE, 0)
+    }
+
+    private fun createMeowTalkNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val importance = NotificationManager.IMPORTANCE_DEFAULT
+            val channel = NotificationChannel(MEOWTALK_NOTIFICATION_CHANNEL_ID, MEOWTALK_NOTIFICATION_CHANNEL_NAME, importance).apply {
+                description = "Notifications for random MeowTalk phrases"
+            }
+            val notificationManager:
+                NotificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+            Log.d(TAG, "MeowTalk Notification Channel created.")
+        }
+    }
+
+    private fun handleIntentForNavigation(intent: Intent?) {
+        intent?.getStringExtra(MeowTalkAlarmReceiver.EXTRA_NAVIGATE_TO_TAB)?.let { targetRoute ->
+            if (targetRoute == MeowTalkAlarmReceiver.MEOWTALK_TAB_ROUTE) {
+                Log.d(TAG, "Intent requests navigation to MeowTalk tab: $targetRoute")
+                initialScreenRouteFromIntent = targetRoute
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent) 
+        handleIntentForNavigation(intent) 
+    }
+
+    @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        scheduleYoutubeSync() // This worker has been refactored to use RSS
-        // scheduleRssSyncWorker() // Removed
+        handleIntentForNavigation(intent) 
+        createMeowTalkNotificationChannel()
+        scheduleYoutubeSync()
 
         val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val welcomeDialogAlreadyShown = sharedPrefs.getBoolean(KEY_WELCOME_DIALOG_SHOWN, false)
+        val meowTalkScheduler = MeowTalkScheduler(this)
 
         setContent {
             var currentAppTheme by remember { mutableStateOf(loadThemePreference()) }
@@ -149,10 +263,53 @@ class MainActivity : ComponentActivity() {
                 selectedTabRoute = newRoute
             } }
 
+            LaunchedEffect(initialScreenRouteFromIntent) {
+                initialScreenRouteFromIntent?.let {
+                    route ->
+                    Log.d(TAG, "LaunchedEffect: Navigating to initial tab from intent: $route")
+                    onSelectedTabRouteChange(route)
+                    initialScreenRouteFromIntent = null 
+                }
+            }
+
             var isLoginMusicEnabled by rememberSaveable { mutableStateOf(loadLoginMusicPreference()) }
             val onLoginMusicEnabledChange: (Boolean) -> Unit = remember { { enabled ->
                 saveLoginMusicPreference(enabled)
                 isLoginMusicEnabled = enabled
+            } }
+
+            var isMeowTalkEnabled by rememberSaveable { mutableStateOf(loadMeowTalkEnabledPreference()) }
+            val onMeowTalkEnabledChange: (Boolean) -> Unit = remember { { enabled ->
+                saveMeowTalkEnabledPreference(enabled)
+                isMeowTalkEnabled = enabled
+                if (enabled) {
+                    meowTalkScheduler.schedule(loadMeowTalkIntervalPreference(), loadMeowTalkSchedulingTypePreference(), loadMeowTalkSpecificHourPreference(), loadMeowTalkSpecificMinutePreference())
+                } else {
+                    meowTalkScheduler.cancel()
+                }
+            } }
+
+            var meowTalkIntervalMinutes by rememberSaveable { mutableStateOf(loadMeowTalkIntervalPreference()) }
+            val onMeowTalkIntervalChange: (Int) -> Unit = remember { { minutes ->
+                saveMeowTalkIntervalPreference(minutes)
+                meowTalkIntervalMinutes = minutes
+                if (isMeowTalkEnabled) meowTalkScheduler.schedule(minutes, loadMeowTalkSchedulingTypePreference(), loadMeowTalkSpecificHourPreference(), loadMeowTalkSpecificMinutePreference())
+            } }
+
+            var meowTalkSchedulingType by rememberSaveable { mutableStateOf(loadMeowTalkSchedulingTypePreference()) }
+            val onMeowTalkSchedulingTypeChange: (String) -> Unit = remember { { type ->
+                saveMeowTalkSchedulingTypePreference(type)
+                meowTalkSchedulingType = type
+                if (isMeowTalkEnabled) meowTalkScheduler.schedule(loadMeowTalkIntervalPreference(), type, loadMeowTalkSpecificHourPreference(), loadMeowTalkSpecificMinutePreference())
+            } }
+
+            var meowTalkSpecificHour by rememberSaveable { mutableStateOf(loadMeowTalkSpecificHourPreference()) }
+            var meowTalkSpecificMinute by rememberSaveable { mutableStateOf(loadMeowTalkSpecificMinutePreference()) }
+            val onMeowTalkSpecificTimeChange: (Int, Int) -> Unit = remember { { hour, minute ->
+                saveMeowTalkSpecificTimePreference(hour, minute)
+                meowTalkSpecificHour = hour
+                meowTalkSpecificMinute = minute
+                if (isMeowTalkEnabled) meowTalkScheduler.schedule(loadMeowTalkIntervalPreference(), loadMeowTalkSchedulingTypePreference(), hour, minute)
             } }
 
             var showWelcomeDialog by rememberSaveable { mutableStateOf(!welcomeDialogAlreadyShown) }
@@ -163,11 +320,10 @@ class MainActivity : ComponentActivity() {
                     apply()
                 }
             }
+            val windowSizeClass = calculateWindowSizeClass(this@MainActivity)
 
             MeowbahTheme(currentSelectedTheme = currentAppTheme) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                ) {
+                Surface(modifier = Modifier.fillMaxSize()) {
                     AppNavigation(
                         currentAppTheme = currentAppTheme,
                         onThemeChange = onThemeChange,
@@ -175,9 +331,19 @@ class MainActivity : ComponentActivity() {
                         onSelectedTabRouteChange = onSelectedTabRouteChange,
                         isLoginMusicEnabled = isLoginMusicEnabled,
                         onLoginMusicEnabledChange = onLoginMusicEnabledChange,
+                        isMeowTalkEnabled = isMeowTalkEnabled,
+                        onMeowTalkEnabledChange = onMeowTalkEnabledChange,
+                        meowTalkIntervalMinutes = meowTalkIntervalMinutes,
+                        onMeowTalkIntervalChange = onMeowTalkIntervalChange,
+                        meowTalkSchedulingType = meowTalkSchedulingType,
+                        onMeowTalkSchedulingTypeChange = onMeowTalkSchedulingTypeChange,
+                        meowTalkSpecificHour = meowTalkSpecificHour,
+                        meowTalkSpecificMinute = meowTalkSpecificMinute,
+                        onMeowTalkSpecificTimeChange = onMeowTalkSpecificTimeChange,
                         getPendingVideoId = { getPendingVideoIdFromIntent(intent) },
                         showWelcomeDialog = showWelcomeDialog,
-                        onWelcomeDialogDismissed = onWelcomeDialogDismissed
+                        onWelcomeDialogDismissed = onWelcomeDialogDismissed,
+                        windowSizeClass = windowSizeClass.widthSizeClass
                     )
                 }
             }
@@ -198,19 +364,16 @@ class MainActivity : ComponentActivity() {
             .build()
 
         val periodicSyncRequest = PeriodicWorkRequestBuilder<YoutubeSyncWorker>(
-            30, TimeUnit.MINUTES // Changed from 12 HOURS to 30 MINUTES
-        )
-            .setConstraints(constraints)
-            .build()
+            30, TimeUnit.MINUTES
+        ).setConstraints(constraints).build()
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             YoutubeSyncWorker.WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP, // Ensures only one instance of the worker runs
+            ExistingPeriodicWorkPolicy.KEEP,
             periodicSyncRequest
         )
         Log.i(TAG, "YoutubeSyncWorker (RSS) scheduled to run every 30 minutes.")
     }
-
 }
 
 @Composable
@@ -221,9 +384,19 @@ fun AppNavigation(
     onSelectedTabRouteChange: (String) -> Unit,
     isLoginMusicEnabled: Boolean,
     onLoginMusicEnabledChange: (Boolean) -> Unit,
+    isMeowTalkEnabled: Boolean,
+    onMeowTalkEnabledChange: (Boolean) -> Unit,
+    meowTalkIntervalMinutes: Int,
+    onMeowTalkIntervalChange: (Int) -> Unit,
+    meowTalkSchedulingType: String,
+    onMeowTalkSchedulingTypeChange: (String) -> Unit,
+    meowTalkSpecificHour: Int,
+    meowTalkSpecificMinute: Int,
+    onMeowTalkSpecificTimeChange: (Int, Int) -> Unit,
     getPendingVideoId: () -> String?,
     showWelcomeDialog: Boolean,
-    onWelcomeDialogDismissed: () -> Unit
+    onWelcomeDialogDismissed: () -> Unit,
+    windowSizeClass: WindowWidthSizeClass
 ) {
     val TAG = "AppNavigation"
     val navController = rememberNavController()
@@ -237,7 +410,7 @@ fun AppNavigation(
             }
         }
     }
-    
+
     LaunchedEffect(Unit) {
         val pendingVideoId = getPendingVideoId()
         if (pendingVideoId != null) {
@@ -245,7 +418,7 @@ fun AppNavigation(
         }
     }
 
-    NavHost(navController = navController, startDestination = "main_screen" ) {
+    NavHost(navController = navController, startDestination = "main_screen") {
         composable("main_screen") {
             MainScreen(
                 currentAppTheme = currentAppTheme,
@@ -255,13 +428,55 @@ fun AppNavigation(
                 onSelectedTabRouteChange = onSelectedTabRouteChange,
                 isLoginMusicEnabled = isLoginMusicEnabled,
                 onLoginMusicEnabledChange = onLoginMusicEnabledChange,
-                getPendingVideoId = getPendingVideoId
+                isMeowTalkEnabled = isMeowTalkEnabled,
+                onMeowTalkEnabledChange = onMeowTalkEnabledChange,
+                meowTalkIntervalMinutes = meowTalkIntervalMinutes,
+                onMeowTalkIntervalChange = onMeowTalkIntervalChange,
+                meowTalkSchedulingType = meowTalkSchedulingType,
+                onMeowTalkSchedulingTypeChange = onMeowTalkSchedulingTypeChange,
+                meowTalkSpecificHour = meowTalkSpecificHour,
+                meowTalkSpecificMinute = meowTalkSpecificMinute,
+                onMeowTalkSpecificTimeChange = onMeowTalkSpecificTimeChange,
+                getPendingVideoId = getPendingVideoId,
+                windowSizeClass = windowSizeClass
             )
         }
     }
 
     if (showWelcomeDialog) {
         WelcomeDialog(onDismissRequest = onWelcomeDialogDismissed)
+    }
+}
+
+@Composable
+private fun AppNavigationRail(
+    innerNavController: NavController,
+    currentInnerDestination: NavDestination?,
+    selectedTabRoute: String,
+    onSelectedTabRouteChange: (String) -> Unit,
+    items: List<BottomNavItem>,
+    modifier: Modifier = Modifier
+) {
+    NavigationRail(modifier = modifier.fillMaxHeight()) {
+        items.forEach { screen ->
+            val isSelected = currentInnerDestination?.hierarchy?.any { it.route == screen.route } == true || selectedTabRoute == screen.route
+            NavigationRailItem(
+                selected = isSelected,
+                onClick = {
+                    if (currentInnerDestination?.route != screen.route) {
+                        onSelectedTabRouteChange(screen.route)
+                        innerNavController.navigate(screen.route) {
+                            popUpTo(innerNavController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                },
+                icon = { Icon(imageVector = if (isSelected) screen.icon else screen.outlinedIcon, contentDescription = screen.label) },
+                label = { Text(screen.label) },
+                alwaysShowLabel = false
+            )
+        }
     }
 }
 
@@ -274,7 +489,17 @@ fun MainScreen(
     onSelectedTabRouteChange: (String) -> Unit,
     isLoginMusicEnabled: Boolean,
     onLoginMusicEnabledChange: (Boolean) -> Unit,
-    getPendingVideoId: () -> String?
+    isMeowTalkEnabled: Boolean,
+    onMeowTalkEnabledChange: (Boolean) -> Unit,
+    meowTalkIntervalMinutes: Int,
+    onMeowTalkIntervalChange: (Int) -> Unit,
+    meowTalkSchedulingType: String,
+    onMeowTalkSchedulingTypeChange: (String) -> Unit,
+    meowTalkSpecificHour: Int,
+    meowTalkSpecificMinute: Int,
+    onMeowTalkSpecificTimeChange: (Int, Int) -> Unit,
+    getPendingVideoId: () -> String?,
+    windowSizeClass: WindowWidthSizeClass
 ) {
     val TAG = "MainScreen"
     val innerNavController = rememberNavController()
@@ -286,13 +511,15 @@ fun MainScreen(
     val navBackStackEntry by innerNavController.currentBackStackEntryAsState()
     val currentInnerDestination = navBackStackEntry?.destination
 
-    val showBottomBar = remember(currentInnerDestination) {
+    val showNavigationUi = remember(currentInnerDestination) {
         currentInnerDestination?.route?.startsWith("video_detail/") == false
     }
-    
+
+    val useNavRail = windowSizeClass > WindowWidthSizeClass.Compact
+
     LaunchedEffect(selectedTabRoute) {
         if (innerNavController.currentDestination?.route != selectedTabRoute) {
-             innerNavController.navigate(selectedTabRoute) {
+            innerNavController.navigate(selectedTabRoute) {
                 popUpTo(innerNavController.graph.findStartDestination().id) { saveState = true }
                 launchSingleTop = true
                 restoreState = true
@@ -305,10 +532,10 @@ fun MainScreen(
         if (videoId != null) {
             Log.d(TAG, "Pending video ID $videoId found in MainScreen. Navigating on innerNavController.")
             if (selectedTabRoute != BottomNavItem.Videos.route) {
-                 onSelectedTabRouteChange(BottomNavItem.Videos.route)
+                onSelectedTabRouteChange(BottomNavItem.Videos.route)
             }
             innerNavController.navigate("video_detail/$videoId") {
-                 popUpTo(innerNavController.graph.findStartDestination().id) {
+                popUpTo(innerNavController.graph.findStartDestination().id) {
                     saveState = true
                 }
                 launchSingleTop = true
@@ -385,67 +612,91 @@ fun MainScreen(
 
     Scaffold(
         bottomBar = {
-            AnimatedVisibility(
-                visible = showBottomBar,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                NavigationBar {
-                    bottomNavItems.forEach { screen ->
-                        val isSelected = currentInnerDestination?.hierarchy?.any { it.route == screen.route } == true || selectedTabRoute == screen.route
-                        NavigationBarItem(
-                            selected = isSelected,
-                            onClick = {
-                                if (currentInnerDestination?.route != screen.route) {
-                                    onSelectedTabRouteChange(screen.route)
-                                    innerNavController.navigate(screen.route) {
-                                        popUpTo(innerNavController.graph.findStartDestination().id) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
+            if (!useNavRail && showNavigationUi) {
+                AnimatedVisibility(visible = true, enter = fadeIn(), exit = fadeOut()) {
+                    NavigationBar {
+                        bottomNavItems.forEach { screen ->
+                            val isSelected = currentInnerDestination?.hierarchy?.any { it.route == screen.route } == true || selectedTabRoute == screen.route
+                            NavigationBarItem(
+                                selected = isSelected,
+                                onClick = {
+                                    if (currentInnerDestination?.route != screen.route) {
+                                        onSelectedTabRouteChange(screen.route)
+                                        innerNavController.navigate(screen.route) {
+                                            popUpTo(innerNavController.graph.findStartDestination().id) { saveState = true }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
                                     }
-                                }
-                            },
-                            icon = {
-                                Icon(imageVector = if (isSelected) screen.icon else screen.outlinedIcon, contentDescription = screen.label)
-                            },
-                            label = { Text(screen.label) }
-                        )
+                                },
+                                icon = { Icon(imageVector = if (isSelected) screen.icon else screen.outlinedIcon, contentDescription = screen.label) },
+                                label = { Text(screen.label) }
+                            )
+                        }
                     }
                 }
             }
         }
-    ) { paddingValues ->
-        NavHost(
-            navController = innerNavController,
-            startDestination = BottomNavItem.Videos.route, 
-            modifier = Modifier.padding(paddingValues).fillMaxSize()
-        ) {
-            composable(BottomNavItem.Videos.route) {
-                VideosScreen(navController = innerNavController, viewModel = videosViewModel)
-            }
-            composable(BottomNavItem.Settings.route) {
-                SettingsScreen(
-                    navController = innerNavController,
-                    currentAppTheme = currentAppTheme,
-                    onThemeChange = onThemeChange,
-                    isLoginMusicEnabled = isLoginMusicEnabled,
-                    onLoginMusicEnabledChange = onLoginMusicEnabledChange
-                )
-            }
-            composable(
-                route = "video_detail/{videoId}",
-                arguments = listOf(navArgument("videoId") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val videoId = backStackEntry.arguments?.getString("videoId")
-                if (videoId != null) {
-                    VideoDetailScreen(
-                        navController = innerNavController,
-                        videoId = videoId,
-                        videosViewModel = videosViewModel
+    ) { scaffoldPaddingValues ->
+        Row(modifier = Modifier.fillMaxSize().padding(scaffoldPaddingValues)) {
+            if (useNavRail && showNavigationUi) {
+                AnimatedVisibility(visible = true, enter = fadeIn(), exit = fadeOut()) {
+                    AppNavigationRail(
+                        innerNavController = innerNavController,
+                        currentInnerDestination = currentInnerDestination,
+                        selectedTabRoute = selectedTabRoute,
+                        onSelectedTabRouteChange = onSelectedTabRouteChange,
+                        items = bottomNavItems
                     )
-                } else {
-                    Log.e(TAG, "Error: videoId was null for VideoDetailScreen.")
-                    Text("Error loading video details. Video ID missing.")
+                }
+            }
+            NavHost(
+                navController = innerNavController,
+                startDestination = selectedTabRoute,
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            ) {
+                composable(BottomNavItem.Videos.route) {
+                    VideosScreen(navController = innerNavController, viewModel = videosViewModel)
+                }
+                composable(BottomNavItem.Settings.route) {
+                    SettingsScreen(
+                        navController = innerNavController,
+                        currentAppTheme = currentAppTheme,
+                        onThemeChange = onThemeChange,
+                        isLoginMusicEnabled = isLoginMusicEnabled,
+                        onLoginMusicEnabledChange = onLoginMusicEnabledChange,
+                        isMeowTalkEnabled = isMeowTalkEnabled,
+                        onMeowTalkEnabledChange = onMeowTalkEnabledChange,
+                        meowTalkIntervalMinutes = meowTalkIntervalMinutes,
+                        onMeowTalkIntervalChange = onMeowTalkIntervalChange,
+                        meowTalkSchedulingType = meowTalkSchedulingType,
+                        onMeowTalkSchedulingTypeChange = onMeowTalkSchedulingTypeChange,
+                        meowTalkSpecificHour = meowTalkSpecificHour,
+                        meowTalkSpecificMinute = meowTalkSpecificMinute,
+                        onMeowTalkSpecificTimeChange = onMeowTalkSpecificTimeChange
+                    )
+                }
+                composable(BottomNavItem.Art.route) {
+                    FanArtScreen(navController = innerNavController)
+                }
+                composable(BottomNavItem.MeowTalk.route) {
+                    MeowTalkScreen(navController = innerNavController)
+                }
+                composable(
+                    route = "video_detail/{videoId}",
+                    arguments = listOf(navArgument("videoId") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    val videoId = backStackEntry.arguments?.getString("videoId")
+                    if (videoId != null) {
+                        VideoDetailScreen(
+                            navController = innerNavController,
+                            videoId = videoId,
+                            videosViewModel = videosViewModel
+                        )
+                    } else {
+                        Log.e(TAG, "Error: videoId was null for VideoDetailScreen.")
+                        Text("Error loading video details. Video ID missing.")
+                    }
                 }
             }
         }

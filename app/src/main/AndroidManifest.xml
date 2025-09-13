@@ -2,9 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- <uses-feature android:name="android.hardware.type.watch" /> REMOVED -->
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:allowBackup="true"
@@ -16,6 +21,25 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Meowbah"
         tools:targetApi="31">
+        <!-- <uses-library
+            android:name="com.google.android.wearable"
+            android:required="true" /> REMOVED -->
+        <!-- <uses-library
+            android:name="wear-sdk"
+            android:required="false" /> REMOVED -->
+
+        <!--
+               REMOVED: Meta-data for com.google.android.wearable.standalone
+        -->
+        <!-- <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" /> REMOVED -->
+
+        <!-- <activity
+            android:name=".presentation.wear"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@style/wearTheme.Starting" /> REMOVED -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -23,34 +47,42 @@
             android:theme="@style/Theme.Meowbah">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- Video Content Provider -->
+        <receiver
+            android:name=".ui.notifications.MeowTalkAlarmReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".receivers.BootCompletedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver> <!-- Video Content Provider -->
         <provider
             android:name=".data.VideoContentProvider"
-            android:authorities="com.kawaii.meowbah.provider" 
+            android:authorities="com.kawaii.meowbah.provider"
             android:exported="false"
-            android:grantUriPermissions="true" />
-
-        <!-- FileProvider for sharing cached thumbnails -->
+            android:grantUriPermissions="true" /> <!-- FileProvider for sharing cached thumbnails -->
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.kawaii.meowbah.fileprovider" 
+            android:authorities="com.kawaii.meowbah.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/provider_paths" />
         </provider>
-
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
             android:exported="false"
             tools:node="merge">
-            <meta-data  android:name="androidx.work.WorkManagerInitializer"
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
                 android:value="androidx.startup" />
         </provider>
     </application>
