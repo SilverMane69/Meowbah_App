@@ -20,15 +20,20 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Article // Added
 import androidx.compose.material.icons.filled.FormatPaint
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.filled.Storefront // Added for Merch
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.outlined.Article // Added
 import androidx.compose.material.icons.outlined.FormatPaint
 import androidx.compose.material.icons.outlined.FormatQuote
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Storefront // Added for Merch
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme // Kept for other typography uses if any
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
@@ -75,12 +80,16 @@ import com.kawaii.meowbah.ui.notifications.MeowTalkScheduler
 import com.kawaii.meowbah.ui.screens.FanArtScreen
 import com.kawaii.meowbah.ui.screens.SettingsScreen
 import com.kawaii.meowbah.ui.screens.MeowTalkScreen
+import com.kawaii.meowbah.ui.screens.PostsScreen // Added
 import com.kawaii.meowbah.ui.screens.VideosScreen
+import com.kawaii.meowbah.ui.screens.merch.MerchDetailScreen // Added for Merch
+import com.kawaii.meowbah.ui.screens.merch.MerchScreen // Added for Merch
 import com.kawaii.meowbah.ui.screens.videodetail.VideoDetailScreen
 import com.kawaii.meowbah.ui.screens.videos.VideosViewModel
 import com.kawaii.meowbah.ui.theme.AvailableTheme
 import com.kawaii.meowbah.ui.theme.MeowbahTheme
 import com.kawaii.meowbah.ui.theme.allThemes
+import com.kawaii.meowbah.workers.PostsSyncWorker // Added
 import com.kawaii.meowbah.workers.YoutubeSyncWorker
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
@@ -95,15 +104,19 @@ sealed class BottomNavItem(
     val outlinedIcon: ImageVector
 ) {
     object Videos : BottomNavItem("videos_tab", "Videos", Icons.Filled.Videocam, Icons.Outlined.Videocam)
-    object Settings : BottomNavItem("settings_tab", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
     object Art : BottomNavItem(route = "art_tab", label = "Art", Icons.Filled.FormatPaint, outlinedIcon = Icons.Outlined.FormatPaint)
+    object Merch : BottomNavItem("merch_tab", "Merch", Icons.Filled.Storefront, Icons.Outlined.Storefront) // New Merch Tab
     object MeowTalk : BottomNavItem(route = "meowtalk_tab", label = "MeowTalk", Icons.Filled.FormatQuote, outlinedIcon = Icons.Outlined.FormatQuote)
+    object Posts : BottomNavItem("posts_tab", "Posts", Icons.Filled.Article, Icons.Outlined.Article) // Added
+    object Settings : BottomNavItem("settings_tab", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 
 val bottomNavItems = listOf(
     BottomNavItem.Videos,
     BottomNavItem.Art,
+    BottomNavItem.Merch, // Added Merch to the list
     BottomNavItem.MeowTalk,
+    BottomNavItem.Posts, // Added
     BottomNavItem.Settings
 )
 
@@ -262,6 +275,7 @@ class MainActivity : ComponentActivity() {
         createMeowTalkNotificationChannel()
         // Video notification channel is created in NotificationUtils when first needed
         scheduleYoutubeSync()
+        schedulePostsSync() // Added
 
         val sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val welcomeDialogAlreadyShown = sharedPrefs.getBoolean(KEY_WELCOME_DIALOG_SHOWN, false)
@@ -313,7 +327,7 @@ class MainActivity : ComponentActivity() {
                 if (isMeowTalkEnabled) meowTalkScheduler.schedule(minutes, loadMeowTalkSchedulingTypePreference(), loadMeowTalkSpecificHourPreference(), loadMeowTalkSpecificMinutePreference())
             } }
 
-            var meowTalkSchedulingType by rememberSaveable { mutableStateOf(loadMeowTalkSchedulingTypePreference()) }
+            var meowTalkSchedulingType by rememberSaveable { mutableStateOf(loadMeowTalkSchedulingTypePreference()) } // Corrected typo: mutableStateOF -> mutableStateOf
             val onMeowTalkSchedulingTypeChange: (String) -> Unit = remember { { type ->
                 saveMeowTalkSchedulingTypePreference(type)
                 meowTalkSchedulingType = type
@@ -389,7 +403,7 @@ class MainActivity : ComponentActivity() {
             .build()
 
         val periodicSyncRequest = PeriodicWorkRequestBuilder<YoutubeSyncWorker>(
-            30, TimeUnit.MINUTES
+            30, TimeUnit.MINUTES // Changed to 30 minutes from 15
         ).setConstraints(constraints).build()
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
@@ -398,6 +412,23 @@ class MainActivity : ComponentActivity() {
             periodicSyncRequest
         )
         Log.i(TAG, "YoutubeSyncWorker (RSS) scheduled to run every 30 minutes.")
+    }
+
+    private fun schedulePostsSync() { // Added function
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val periodicSyncRequest = PeriodicWorkRequestBuilder<PostsSyncWorker>(
+            15, TimeUnit.MINUTES
+        ).setConstraints(constraints).build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            PostsSyncWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            periodicSyncRequest
+        )
+        Log.i(TAG, "PostsSyncWorker (RSS) scheduled to run every 15 minutes.")
     }
 }
 
@@ -502,7 +533,7 @@ private fun AppNavigationRail(
                     }
                 },
                 icon = { Icon(imageVector = if (isSelected) screen.icon else screen.outlinedIcon, contentDescription = screen.label) },
-                label = { Text(screen.label) },
+                label = null, // Label removed
                 alwaysShowLabel = false
             )
         }
@@ -543,7 +574,8 @@ fun MainScreen(
     val currentInnerDestination = navBackStackEntry?.destination
 
     val showNavigationUi = remember(currentInnerDestination) {
-        currentInnerDestination?.route?.startsWith("video_detail/") == false
+        currentInnerDestination?.route?.startsWith("video_detail/") == false &&
+        currentInnerDestination?.route?.startsWith("merchDetail/") == false // Hide for merch detail too
     }
 
     val useNavRail = windowSizeClass > WindowWidthSizeClass.Compact
@@ -661,7 +693,7 @@ fun MainScreen(
                                     }
                                 },
                                 icon = { Icon(imageVector = if (isSelected) screen.icon else screen.outlinedIcon, contentDescription = screen.label) },
-                                label = { Text(screen.label) }
+                                label = null // Label removed
                             )
                         }
                     }
@@ -689,6 +721,18 @@ fun MainScreen(
                 composable(BottomNavItem.Videos.route) {
                     VideosScreen(navController = innerNavController, viewModel = videosViewModel)
                 }
+                composable(BottomNavItem.Art.route) {
+                    FanArtScreen(navController = innerNavController)
+                }
+                composable(BottomNavItem.Merch.route) { // Merch grid screen
+                    MerchScreen(navController = innerNavController)
+                }
+                composable(BottomNavItem.MeowTalk.route) {
+                    MeowTalkScreen(navController = innerNavController)
+                }
+                composable(BottomNavItem.Posts.route) { // Added
+                    PostsScreen(navController = innerNavController)
+                }
                 composable(BottomNavItem.Settings.route) {
                     SettingsScreen(
                         navController = innerNavController,
@@ -709,12 +753,6 @@ fun MainScreen(
                         onVideoNotificationsEnabledChange = onVideoNotificationsEnabledChange // Pass to SettingsScreen
                     )
                 }
-                composable(BottomNavItem.Art.route) {
-                    FanArtScreen(navController = innerNavController)
-                }
-                composable(BottomNavItem.MeowTalk.route) {
-                    MeowTalkScreen(navController = innerNavController)
-                }
                 composable(
                     route = "video_detail/{videoId}",
                     arguments = listOf(navArgument("videoId") { type = NavType.StringType })
@@ -730,6 +768,13 @@ fun MainScreen(
                         Log.e(TAG, "Error: videoId was null for VideoDetailScreen.")
                         Text("Error loading video details. Video ID missing.")
                     }
+                }
+                composable(
+                    route = "merchDetail/{merchId}", // Merch detail screen route
+                    arguments = listOf(navArgument("merchId") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    val merchId = backStackEntry.arguments?.getString("merchId")
+                    MerchDetailScreen(navController = innerNavController, merchId = merchId)
                 }
             }
         }

@@ -13,6 +13,7 @@ import com.kawaii.meowbah.MEOWTALK_NOTIFICATION_CHANNEL_ID
 import com.kawaii.meowbah.R
 import com.kawaii.meowbah.data.MeowTalkPhrases // Needed to pick a new phrase
 import com.kawaii.meowbah.util.MeowTalkEventBus
+import com.kawaii.meowbah.widget.MeowTalkWidgetProvider // Added import
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -46,6 +47,13 @@ class MeowTalkAlarmReceiver : BroadcastReceiver() {
             apply()
         }
         Log.d(TAG, "Saved new active phrase to Prefs: $newActivePhrase")
+
+        // Broadcast that the phrase has been updated for the widget
+        val widgetUpdateIntent = Intent(context, MeowTalkWidgetProvider::class.java).apply {
+            action = MeowTalkWidgetProvider.ACTION_MEOWTALK_PHRASE_UPDATED
+        }
+        context.sendBroadcast(widgetUpdateIntent)
+        Log.d(TAG, "Sent broadcast for widget update: ${MeowTalkWidgetProvider.ACTION_MEOWTALK_PHRASE_UPDATED}")
 
         // 3. Post notification with this new active phrase
         val launchAppIntent = Intent(context, MainActivity::class.java).apply {

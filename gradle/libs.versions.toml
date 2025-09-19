@@ -20,6 +20,7 @@ composeFoundation = "1.2.1"
 wearToolingPreview = "1.0.0"
 coreSplashscreen = "1.0.1"
 playServicesWearable = "18.0.0"  # Added WorkManager version
+kotlinKsp = "2.0.0-1.0.21" # Added KSP Version
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -54,3 +55,4 @@ play-services-wearable = { group = "com.google.android.gms", name = "play-servic
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" } # Added this line
+kotlin-ksp = { id = "com.google.devtools.ksp", version.ref = "kotlinKsp" } # Added KSP Plugin

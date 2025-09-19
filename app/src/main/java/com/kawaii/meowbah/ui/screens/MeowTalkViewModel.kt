@@ -2,22 +2,19 @@ package com.kawaii.meowbah.ui.screens
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent // Added import
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-// Removed: com.google.android.gms.wearable.PutDataMapRequest
-// Removed: com.google.android.gms.wearable.Wearable
 import com.kawaii.meowbah.MainActivity // For accessing companion object constants
-// Removed: com.kawaii.meowbah.WearableDataConstants
 import com.kawaii.meowbah.data.MeowTalkPhrases
 import com.kawaii.meowbah.util.MeowTalkEventBus
+import com.kawaii.meowbah.widget.MeowTalkWidgetProvider // Added import
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
-// Removed: kotlinx.coroutines.tasks.await
-// Removed: kotlinx.coroutines.withTimeoutOrNull
 import kotlin.random.Random
 
 class MeowTalkViewModel(application: Application) : AndroidViewModel(application) {
@@ -27,8 +24,6 @@ class MeowTalkViewModel(application: Application) : AndroidViewModel(application
 
     private val _currentPhrase = MutableStateFlow("") // Displayed on screen
     val currentPhrase: StateFlow<String> = _currentPhrase.asStateFlow()
-
-    // Removed: private val dataClient by lazy { Wearable.getDataClient(app) }
 
     companion object {
         private const val TAG = "MeowTalkViewModel"
@@ -44,7 +39,6 @@ class MeowTalkViewModel(application: Application) : AndroidViewModel(application
                 .collect { activatedPhraseByNotification -> 
                     Log.d(TAG, "Event received: Phrase \"$activatedPhraseByNotification\" was activated by notification.")
                     _currentPhrase.value = activatedPhraseByNotification
-                    // Removed: updateWatch(activatedPhraseByNotification)
                 }
         }
     }
@@ -55,7 +49,6 @@ class MeowTalkViewModel(application: Application) : AndroidViewModel(application
         if (existingPhrase != null) {
             _currentPhrase.value = existingPhrase
             Log.d(TAG, "Loaded initial phrase from Prefs: $existingPhrase")
-            // Removed: updateWatch(existingPhrase)
         } else {
             Log.d(TAG, "No initial phrase in Prefs. Activating and saving a new one.")
             activateNewRandomPhrase(isInitial = true)
@@ -75,7 +68,6 @@ class MeowTalkViewModel(application: Application) : AndroidViewModel(application
         }
         _currentPhrase.value = newPhrase
         saveCurrentPhraseToPrefs(newPhrase)
-        // Removed: updateWatch(newPhrase)
 
         if(isInitial) {
             Log.d(TAG, "Initial phrase activated and saved: $newPhrase")
@@ -91,7 +83,12 @@ class MeowTalkViewModel(application: Application) : AndroidViewModel(application
             apply()
         }
         Log.d(TAG, "Saved current phrase to SharedPreferences: $phrase")
-    }
 
-    // Removed: private fun updateWatch(phrase: String) { ... }
+        // Broadcast that the phrase has been updated
+        val intent = Intent(app, MeowTalkWidgetProvider::class.java).apply {
+            action = MeowTalkWidgetProvider.ACTION_MEOWTALK_PHRASE_UPDATED
+        }
+        app.sendBroadcast(intent)
+        Log.d(TAG, "Sent broadcast: ${MeowTalkWidgetProvider.ACTION_MEOWTALK_PHRASE_UPDATED}")
+    }
 }

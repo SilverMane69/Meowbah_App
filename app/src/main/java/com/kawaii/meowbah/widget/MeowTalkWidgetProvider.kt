@@ -3,6 +3,7 @@ package com.kawaii.meowbah.widget
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -15,6 +16,11 @@ import com.kawaii.meowbah.ui.notifications.MeowTalkAlarmReceiver // Required for
  * Implementation of App Widget functionality.
  */
 class MeowTalkWidgetProvider : AppWidgetProvider() {
+
+    companion object {
+        const val ACTION_MEOWTALK_PHRASE_UPDATED = "com.kawaii.meowbah.ACTION_MEOWTALK_PHRASE_UPDATED"
+    }
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -23,6 +29,16 @@ class MeowTalkWidgetProvider : AppWidgetProvider() {
         // There may be multiple widgets active, so update all of them
         for (appWidgetId in appWidgetIds) {
             updateAppWidget(context, appWidgetManager, appWidgetId)
+        }
+    }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent) // Important to call super for other actions
+        if (ACTION_MEOWTALK_PHRASE_UPDATED == intent.action) {
+            val appWidgetManager = AppWidgetManager.getInstance(context)
+            val thisAppWidget = ComponentName(context.packageName, javaClass.name)
+            val appWidgetIds = appWidgetManager.getAppWidgetIds(thisAppWidget)
+            onUpdate(context, appWidgetManager, appWidgetIds) // Trigger update for all instances
         }
     }
 
@@ -48,7 +64,7 @@ internal fun updateAppWidget(
     views.setTextViewText(R.id.appwidget_text, currentPhrase)
 
     // Create an Intent to launch MainActivity and navigate to MeowTalk tab
-    val intent = Intent(context, MainActivity::class.java).apply {
+    val activityIntent = Intent(context, MainActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         putExtra(MeowTalkAlarmReceiver.EXTRA_NAVIGATE_TO_TAB, MeowTalkAlarmReceiver.MEOWTALK_TAB_ROUTE)
     }
@@ -58,7 +74,7 @@ internal fun updateAppWidget(
     } else {
         PendingIntent.FLAG_UPDATE_CURRENT
     }
-    val pendingIntent = PendingIntent.getActivity(context, appWidgetId, intent, pendingIntentFlags)
+    val pendingIntent = PendingIntent.getActivity(context, appWidgetId, activityIntent, pendingIntentFlags)
 
     views.setOnClickPendingIntent(R.id.meow_talk_widget_root, pendingIntent)
 
