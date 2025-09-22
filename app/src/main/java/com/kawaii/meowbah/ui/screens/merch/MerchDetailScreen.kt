@@ -45,11 +45,11 @@ fun MerchDetailScreen(
     }
 
     Scaffold(
-        // TopAppBar removed
+        contentWindowInsets = WindowInsets(0.dp)
     ) { paddingValues ->
         if (merchItem == null) {
             Box(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                modifier = Modifier.fillMaxSize().padding(paddingValues).safeDrawingPadding(),
                 contentAlignment = Alignment.Center
             ) {
                 // Back button for consistency even when item is not found, or error
@@ -72,9 +72,11 @@ fun MerchDetailScreen(
                         .fillMaxSize()
                         .padding(paddingValues) // Apply scaffold padding first
                         .verticalScroll(rememberScrollState())
+                        .safeDrawingPadding()
                     ,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Spacer(modifier = Modifier.height(64.dp)) // Added Spacer
                     // Row for Back and Share buttons
                     Row(
                         modifier = Modifier

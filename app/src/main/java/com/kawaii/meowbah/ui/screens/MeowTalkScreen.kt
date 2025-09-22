@@ -3,9 +3,11 @@ package com.kawaii.meowbah.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -31,16 +33,18 @@ fun MeowTalkScreen(
     val currentPhrase by meowTalkViewModel.currentPhrase.collectAsState()
 
     Scaffold(
-        // topBar = { TopAppBar(title = { Text("MeowTalk") }) } // TopAppBar removed
+        contentWindowInsets = WindowInsets(0.dp) // Set to 0 for edge-to-edge
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues) // Apply padding from Scaffold
+                .safeDrawingPadding()
                 .padding(16.dp), // Add overall padding for content
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(modifier = Modifier.height(64.dp)) // Added Spacer
             Text(
                 text = currentPhrase,
                 style = MaterialTheme.typography.headlineMedium,

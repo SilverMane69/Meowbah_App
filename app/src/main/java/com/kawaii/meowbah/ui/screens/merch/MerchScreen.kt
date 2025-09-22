@@ -33,11 +33,11 @@ fun MerchScreen(
     val merchItems by merchViewModel.merchItems.collectAsState()
 
     Scaffold(
-        // topBar = { TopAppBar(title = { Text("Meowbah Merch") }) } // Optional TopAppBar
+        contentWindowInsets = WindowInsets(0.dp) // Set to 0 for edge-to-edge
     ) { paddingValues ->
         if (merchItems.isEmpty()) {
             Box(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                modifier = Modifier.fillMaxSize().padding(paddingValues).safeDrawingPadding(),
                 contentAlignment = Alignment.Center
             ) {
                 Text("No merchandise available yet. Stay tuned!")
@@ -45,8 +45,10 @@ fun MerchScreen(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2), // You can adjust the number of columns
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
-                contentPadding = PaddingValues(16.dp),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = WindowInsets.safeDrawing
+                    .add(WindowInsets(left = 16.dp, top = 16.dp, right = 16.dp, bottom = 16.dp))
+                    .asPaddingValues(),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {

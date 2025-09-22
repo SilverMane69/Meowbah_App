@@ -56,7 +56,8 @@ fun VideoDetailScreen(
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets(0.dp)
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -77,6 +78,7 @@ fun VideoDetailScreen(
                         modifier = Modifier
                             .align(Alignment.Center)
                             .padding(16.dp)
+                            .safeDrawingPadding()
                     )
                 }
                 videoItem != null -> {
@@ -91,6 +93,7 @@ fun VideoDetailScreen(
                         modifier = Modifier
                             .align(Alignment.Center)
                             .padding(16.dp)
+                            .safeDrawingPadding()
                     )
                 }
             }
@@ -110,8 +113,10 @@ fun VideoDetailContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
+            .safeDrawingPadding()
             .padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
+        Spacer(modifier = Modifier.height(64.dp)) // Added Spacer
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

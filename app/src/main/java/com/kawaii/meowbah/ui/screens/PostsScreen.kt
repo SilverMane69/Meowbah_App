@@ -10,6 +10,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -40,45 +41,53 @@ fun PostsScreen(
     val context = LocalContext.current
     val twitterUrl = "https://x.com/meowbahv"
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (posts.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("No posts yet. Check back later!")
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp), // Reduced bottom padding
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(posts) { post ->
-                    PostItem(post = post)
+    Scaffold(
+        contentWindowInsets = WindowInsets(0.dp) // Set to 0 for edge-to-edge
+    ) { paddingValues ->
+        Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+            if (posts.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .safeDrawingPadding(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No posts yet. Check back later!")
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = WindowInsets.safeDrawing
+                        .add(WindowInsets(left = 16.dp, top = 72.dp, right = 16.dp, bottom = 8.dp))
+                        .asPaddingValues(), // Reduced bottom padding
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(posts) { post ->
+                        PostItem(post = post)
+                    }
                 }
             }
-        }
 
-        Button(
-            onClick = {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(twitterUrl))
-                try {
-                    context.startActivity(intent)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error opening Twitter URL: $twitterUrl", e)
-                    // Optionally show a toast or snackbar to the user about the error
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp) // Symmetrical horizontal padding
-        ) {
-            Text("View on X (Twitter)")
+            Button(
+                onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(twitterUrl))
+                    try {
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error opening Twitter URL: $twitterUrl", e)
+                        // Optionally show a toast or snackbar to the user about the error
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .navigationBarsPadding() // Symmetrical horizontal padding
+            ) {
+                Text("View on X (Twitter)")
+            }
         }
     }
 }

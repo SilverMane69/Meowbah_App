@@ -49,7 +49,7 @@ fun FanArtScreen(navController: NavController) {
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        // topBar = { TopAppBar(title = { Text("Fan Art Gallery") }) } // Optional: Add a title
+        contentWindowInsets = WindowInsets(0.dp) // Set to 0 for edge-to-edge
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -60,7 +60,8 @@ fun FanArtScreen(navController: NavController) {
                 Box(
                     modifier = Modifier
                         .weight(1f) // Takes up available space
-                        .fillMaxSize(),
+                        .fillMaxSize()
+                        .safeDrawingPadding(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -72,7 +73,9 @@ fun FanArtScreen(navController: NavController) {
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(16.dp), // Padding around the grid items
+                    contentPadding = WindowInsets.safeDrawing
+                        .add(WindowInsets(left = 16.dp, top = 72.dp, right = 16.dp, bottom = 16.dp))
+                        .asPaddingValues(), // Padding around the grid items
                     modifier = Modifier.weight(1f), // Grid takes available space
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -91,6 +94,7 @@ fun FanArtScreen(navController: NavController) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .navigationBarsPadding() // Add padding to avoid the navigation bar
             ) {
                 Text("Support Meowbah on Patreon")
             }
